@@ -111,12 +111,15 @@ class CardView extends StatelessWidget {
                 height: 1.05)),
       );
 
-  Widget _tapuEtiketi() => Container(
+  /// Kart türü şeridi ("TAPU" / "HAMLE KARTI").
+  Widget _etiket(String s) => Container(
         width: double.infinity,
         color: Colors.black12,
         padding: const EdgeInsets.symmetric(vertical: 1),
-        child: Text('TAPU', textAlign: TextAlign.center, style: TextStyle(fontSize: _fs * 0.7, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.black87)),
+        child: Text(s, textAlign: TextAlign.center, style: TextStyle(fontSize: _fs * 0.62, fontWeight: FontWeight.w900, letterSpacing: 1.2, color: Colors.black87)),
       );
+
+  Widget _tapuEtiketi() => _etiket('TAPU');
 
   Widget _tapu(PColor c) {
     return Column(children: [
@@ -230,6 +233,7 @@ class CardView extends StatelessWidget {
             maxLines: 2,
             style: TextStyle(fontSize: _fs * 0.85, fontWeight: FontWeight.w900, color: Colors.white, height: 1.05)),
       ),
+      _etiket('HAMLE KARTI'),
       Expanded(
         child: Center(
           child: Container(
@@ -278,6 +282,7 @@ class CardView extends StatelessWidget {
           ]),
         ),
       ),
+      Positioned(left: 0, right: 0, bottom: 0, child: _etiket('HAMLE KARTI')),
     ]);
   }
 

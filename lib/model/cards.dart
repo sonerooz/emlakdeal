@@ -14,7 +14,7 @@ extension PColorX on PColor {
         PColor.yellow: 'Sarı',
         PColor.green: 'Yeşil',
         PColor.darkBlue: 'Lacivert',
-        PColor.railroad: 'Tren',
+        PColor.railroad: 'Siyah',
         PColor.utility: 'Hizmet',
       }[this]!;
 

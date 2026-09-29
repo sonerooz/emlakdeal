@@ -15,6 +15,23 @@ abstract class Decider {
 
   /// Tur sonunda el 7'yi aşıyorsa atılacak kartları seç.
   Future<List<GameCard>> atilacaklar(Game g, Player me, int adet);
+
+  /// Para talebi (kira/borç/doğum günü): ya ödenecek kartları seç ya da (elinde Reddet varsa)
+  /// reddet. Varsayılan: önce [justSayNo], reddetmezse [ode]. İnsan tek modalda görür.
+  Future<OdemeKarari> odemeKarari(Game g, Player me, int tutar, Player alacakli, String aciklama,
+      {required bool reddedebilir}) async {
+    if (reddedebilir && await justSayNo(g, me, aciklama)) return OdemeKarari.reddet();
+    return OdemeKarari.ode(await ode(g, me, tutar, alacakli));
+  }
+}
+
+class OdemeKarari {
+  OdemeKarari.ode(this.kartlar) : reddet = false;
+  OdemeKarari.reddet()
+      : reddet = true,
+        kartlar = const [];
+  final bool reddet;
+  final List<GameCard> kartlar;
 }
 
 class Player {
@@ -281,6 +298,67 @@ class Game extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ----------------------------------------------------------- para talebi (öde ya da reddet)
+  /// Kira/borç/doğum günü: hedef tek karar verir — öder ya da Reddet oynar. Reddedilirse
+  /// saldıran kendi Reddet'iyle karşı çıkabilir; o zaman hedef yeniden karar verir (zincir).
+  Future<void> _talep(Player saldiran, Player hedef, int tutar, String aciklama, String sebep) async {
+    if (tutar <= 0) return;
+    while (true) {
+      final hedefJsn = hedef.hand.where((c) => c.action == ActionType.justSayNo).toList();
+      if (hedef.varliklar.isEmpty && hedefJsn.isEmpty) {
+        _log('${hedef.name} ödeyecek hiçbir şeyi yok.');
+        return;
+      }
+      OdemeKarari karar;
+      if (hedef.varliklar.isEmpty) {
+        karar = (hedefJsn.isNotEmpty && await hedef.decider.justSayNo(this, hedef, aciklama))
+            ? OdemeKarari.reddet()
+            : OdemeKarari.ode(const []);
+      } else {
+        karar = await hedef.decider.odemeKarari(this, hedef, tutar, saldiran, aciklama, reddedebilir: hedefJsn.isNotEmpty);
+      }
+      if (!karar.reddet) {
+        if (karar.kartlar.isEmpty) {
+          _log('${hedef.name} ödeyecek hiçbir şeyi yok.');
+          return;
+        }
+        await _tahsilKartlarla(hedef, saldiran, karar.kartlar, sebep);
+        return;
+      }
+      // Reddet
+      hedef.hand.remove(hedefJsn.first);
+      discard.add(hedefJsn.first);
+      _log('${hedef.name} Reddet oynadı — $sebep iptal!');
+      notifyListeners();
+      final saldiranJsn = saldiran.hand.where((c) => c.action == ActionType.justSayNo).toList();
+      if (saldiranJsn.isEmpty || !await saldiran.decider.justSayNo(this, saldiran, 'Reddet (${hedef.name} $sebep ödemeyi reddetti)')) {
+        return;
+      }
+      saldiran.hand.remove(saldiranJsn.first);
+      discard.add(saldiranJsn.first);
+      _log('${saldiran.name} Reddet ile karşılık verdi — talep yeniden geçerli!');
+      notifyListeners();
+    }
+  }
+
+  Future<void> _tahsilKartlarla(Player borclu, Player alacakli, List<GameCard> odeme, String sebep) async {
+    var toplam = 0;
+    for (final c in odeme) {
+      if (!borclu.varliklar.contains(c)) continue;
+      await _anim(GameEvent(EvTip.transfer, c, kim: borclu, kime: alacakli, etiket: sebep));
+      borclu.kartiCikar(c);
+      toplam += c.paraDegeri;
+      if (c.isProperty) {
+        alacakli.mulkEkle(c, c.etkinRenk ?? c.colors.first);
+      } else {
+        alacakli.bank.add(c);
+      }
+    }
+    _log('${borclu.name} → ${alacakli.name}: $sebep için ${toplam}M ödedi.');
+    _kazananKontrol();
+    notifyListeners();
+  }
+
   // ----------------------------------------------------------- Just Say No zinciri
   /// [hedef] JSN oynarsa aksiyon iptal olur; saldıran JSN ile karşı çıkabilir (zincir).
   /// true = aksiyon İPTAL edildi.
@@ -326,9 +404,7 @@ class Game extends ChangeNotifier {
     await _aksiyonuAt(p, c);
     final r = rakip(p);
     _log('${p.name} Borç Tahsildarı: ${r.name} 5M ödemeli.');
-    if (!await _jsnZinciri(p, r, 'Borç Tahsildarı (5M)')) {
-      await _tahsil(r, p, 5, 'Borç Tahsildarı');
-    }
+    await _talep(p, r, 5, 'Borç Tahsildarı (5M)', 'Borç Tahsildarı');
     _harca();
     return true;
   }
@@ -338,9 +414,7 @@ class Game extends ChangeNotifier {
     await _aksiyonuAt(p, c);
     _log('${p.name} Doğum Günüm: herkes 2M veriyor.');
     for (final r in players.where((x) => x != p)) {
-      if (!await _jsnZinciri(p, r, 'Doğum Günüm (2M)')) {
-        await _tahsil(r, p, 2, 'Doğum Günü');
-      }
+      await _talep(p, r, 2, 'Doğum Günüm (2M)', 'Doğum Günü');
     }
     _harca();
     return true;
@@ -360,9 +434,7 @@ class Game extends ChangeNotifier {
     }
     final r = rakip(p);
     _log('${p.name} ${renk.ad} kirası: ${tutar}M${cift != null ? ' (çift)' : ''}.');
-    if (!await _jsnZinciri(p, r, '${renk.ad} kirası (${tutar}M)')) {
-      await _tahsil(r, p, tutar, 'kira');
-    }
+    await _talep(p, r, tutar, '${renk.ad} kirası (${tutar}M)', 'kira');
     _harca(cift != null ? 2 : 1);
     return true;
   }

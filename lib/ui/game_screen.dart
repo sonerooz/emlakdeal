@@ -29,7 +29,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final BotDecider _botAi = BotDecider();
   bool _botOynuyor = false;
   bool _bittiGosterildi = false;
-  bool _hazir = false; // başlangıç dağıtımı bitti mi
+  bool _hazir = false;
+  String? _acikDeste; // açılmış deste anahtarı: "ben:pink", "ben:banka", "bot:red" ...
 
   // animasyon
   final _kStack = GlobalKey();
@@ -41,8 +42,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final _kBotEl = GlobalKey();
   final _kBotSet = GlobalKey();
   final List<_Ucan> _ucanlar = [];
-  String? _banner; // ortadaki büyük etiket ("Bot: Sly Deal")
-  GameCard? _bannerKart;
+  String? _banner;
 
   @override
   void initState() {
@@ -72,12 +72,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final stackBox = _kStack.currentContext?.findRenderObject() as RenderBox?;
     final box = k.currentContext?.findRenderObject() as RenderBox?;
     if (stackBox == null || box == null || !box.hasSize) return fallback;
-    final g = box.localToGlobal(box.size.center(Offset.zero));
-    return stackBox.globalToLocal(g);
+    return stackBox.globalToLocal(box.localToGlobal(box.size.center(Offset.zero)));
   }
 
-  Future<void> _ucur(GameCard card, Offset from, Offset to,
-      {bool arka = false, int ms = 420, double w = 74, double scaleTo = 1}) async {
+  Future<void> _ucur(GameCard card, Offset from, Offset to, {bool arka = false, int ms = 420, double w = 74, double scaleTo = 1}) async {
     if (!mounted) return;
     final ctl = AnimationController(vsync: this, duration: Duration(milliseconds: ms));
     final u = _Ucan(card: card, arka: arka, ctl: ctl, from: from, to: to, w: w, scaleTo: scaleTo);
@@ -96,10 +94,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   Future<void> _animasyon(GameEvent e) async {
     if (!mounted) return;
+    if (_acikDeste != null) setState(() => _acikDeste = null); // hareket başlayınca desteler toplanır
     final kim = e.kim;
     switch (e.tip) {
       case EvTip.cek:
-        // desteden ele: insan için açık kart, bot için kapalı; biraz büyüyerek gelir
         await _ucur(e.card, _nokta(_kDeck), _elNoktasi(kim!), arka: kim != ben, ms: 520, w: kim == ben ? 60 : 34, scaleTo: kim == ben ? 1.25 : 1.2);
         await Future.delayed(const Duration(milliseconds: 120));
       case EvTip.mulk:
@@ -107,23 +105,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       case EvTip.banka:
         await _ucur(e.card, _elNoktasi(kim!), _bankaNoktasi(kim), ms: 450, w: kim == ben ? 74 : 56);
       case EvTip.aksiyon:
-        // elden ortaya büyüyerek gel, etiketle bekle, sonra atılanlara küçülerek git
         final merkez = _nokta(_kMerkez);
         await _ucur(e.card, _elNoktasi(kim!), merkez, ms: 420, w: 74, scaleTo: 1.7);
         if (!mounted) return;
-        setState(() {
-          _banner = '${kim == ben ? 'Sen' : 'Bot'}: ${e.etiket ?? e.card.ad}';
-          _bannerKart = e.card;
-        });
+        setState(() => _banner = '${kim == ben ? 'Sen' : 'Bot'}: ${e.etiket ?? e.card.ad}');
         await Future.delayed(Duration(milliseconds: kim == ben ? 700 : 1100));
         if (!mounted) return;
-        setState(() {
-          _banner = null;
-          _bannerKart = null;
-        });
+        setState(() => _banner = null);
         await _ucur(e.card, merkez, _nokta(_kDeck), ms: 300, w: 74, scaleTo: 0.5);
       case EvTip.transfer:
-        final from = e.card.isProperty ? _setNoktasi(kim!) : (kim == ben ? _bankaNoktasi(ben) : _setNoktasi(bot));
+        final from = e.card.isProperty ? _setNoktasi(kim!) : _bankaNoktasi(kim!);
         final to = e.card.isProperty ? _setNoktasi(e.kime!) : _bankaNoktasi(e.kime!);
         if (mounted) setState(() => _banner = '${e.etiket ?? 'Ödeme'}: ${e.card.ad} → ${e.kime!.name}');
         await _ucur(e.card, from, to, ms: 600, w: 64);
@@ -131,7 +122,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-  // ----------------------------------------------------------- bot / akış
+  // ----------------------------------------------------------- akış
   Future<void> _botKontrol() async {
     if (_botOynuyor || game.kazanan != null || !game.aktif.isBot) return;
     _botOynuyor = true;
@@ -177,9 +168,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(s), duration: const Duration(milliseconds: 1400)));
 
-  /// Her insan hamlesinden sonra: ekranı tazele, kazanan var mı bak, 3 hamle bittiyse turu otomatik bitir.
   Future<void> _sonra() async {
-    if (mounted) setState(() {});
+    if (mounted) setState(() => _acikDeste = null);
     _bitisKontrol();
     if (game.kazanan == null && game.aktif == ben && game.playsLeft <= 0) {
       await Future.delayed(const Duration(milliseconds: 600));
@@ -198,12 +188,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       return _sonra();
     }
     final secenekler = <_Secenek>[];
-    if (c.isMoney) {
-      secenekler.add(_Secenek('🏦 Bankaya koy (${c.value}M)', () => game.bankayaKoy(ben, c)));
-    }
-    if (c.isRent) {
-      secenekler.add(_Secenek('💰 Kira iste', () => _kira(c)));
-    }
+    if (c.isRent) secenekler.add(_Secenek('💰 Kira iste', () => _kira(c)));
     if (c.isAction) {
       final a = c.action!;
       switch (a) {
@@ -231,9 +216,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           }));
       }
     }
-    if (!c.isProperty && !c.isMoney) {
-      secenekler.add(_Secenek('🏦 Bankaya koy (${c.paraDegeri}M)', () => game.bankayaKoy(ben, c)));
-    }
+    secenekler.add(_Secenek('🏦 Bankaya koy (${c.paraDegeri}M para olur)', () => game.bankayaKoy(ben, c)));
     final sec = await showModalBottomSheet<_Secenek>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -243,10 +226,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             child: Row(children: [
               CardView(c, w: 70),
               const SizedBox(width: 12),
-              Expanded(
-                child: Text(c.isAction ? c.action!.aciklama : c.ad,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-              ),
+              Expanded(child: Text(c.isAction ? c.action!.aciklama : c.ad, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
             ]),
           ),
           for (final s in secenekler) ListTile(title: Text(s.baslik), onTap: () => Navigator.pop(ctx, s)),
@@ -260,20 +240,30 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     await _sonra();
   }
 
+  /// Tek seçenek varsa sormadan onu döndürür.
+  Future<PColor?> _renkSec(String baslik, List<PColor> renkler, {String Function(PColor)? altYazi}) async {
+    if (renkler.length == 1) return renkler.first;
+    return pickColor(context, baslik, renkler, iptalOlur: true, altYazi: altYazi);
+  }
+
+  Future<GameCard?> _kartSec(String baslik, List<GameCard> kartlar) async {
+    if (kartlar.length == 1) return kartlar.first;
+    final s = await pickCards(context, title: baslik, cards: kartlar, exact: 1, max: 1, iptalOlur: true);
+    return s.isEmpty ? null : s.first;
+  }
+
   Future<bool> _kira(GameCard c) async {
     final renkler = (c.isWildRent ? PColor.values : c.rentColors).where((k) => ben.propsOf(k).isNotEmpty).toList();
     if (renkler.isEmpty) {
-      _mesaj('Bu renkte mülkün yok.');
+      _mesaj('Bu renkte tapun yok.');
       return false;
     }
-    final renk = await pickColor(context, '💰 Hangi rengin kirası?', renkler,
-        iptalOlur: true, altYazi: (k) => '— ${ben.kira(k)}M');
+    final renk = await _renkSec('💰 Hangi rengin kirası?', renkler, altYazi: (k) => '— ${ben.kira(k)}M');
     if (renk == null) return false;
     GameCard? cift;
     final ciftKart = ben.hand.where((x) => x.action == ActionType.doubleRent).toList();
     if (ciftKart.isNotEmpty && game.playsLeft >= 2 && mounted) {
-      if (await confirmDlg(context, '✖2 Çift Kira?',
-          'Çift Kira kartını da oynayıp ${ben.kira(renk) * 2}M isteyeyim mi? (2 hamle harcar)',
+      if (await confirmDlg(context, '✖2 Çift Kira?', 'Çift Kira kartını da oynayıp ${ben.kira(renk) * 2}M isteyeyim mi? (2 hamle harcar)',
           evet: 'Evet, çift', hayir: 'Hayır, tek')) {
         cift = ciftKart.first;
       }
@@ -291,17 +281,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _mesaj('Çift kira için 2 hamle gerekir.');
       return false;
     }
-    final sec = await pickCards(context, title: 'Hangi kira kartıyla?', cards: kiralar, exact: 1, max: 1, iptalOlur: true);
-    if (sec.isEmpty) return false;
-    final c = sec.first;
+    final c = await _kartSec('Hangi kira kartıyla?', kiralar);
+    if (c == null) return false;
     final renkler = (c.isWildRent ? PColor.values : c.rentColors).where((k) => ben.propsOf(k).isNotEmpty).toList();
     if (renkler.isEmpty) {
-      _mesaj('Bu renkte mülkün yok.');
+      _mesaj('Bu renkte tapun yok.');
       return false;
     }
     if (!mounted) return false;
-    final renk = await pickColor(context, '💰 Hangi rengin kirası?', renkler,
-        iptalOlur: true, altYazi: (k) => '— ${ben.kira(k) * 2}M (çift)');
+    final renk = await _renkSec('💰 Hangi rengin kirası?', renkler, altYazi: (k) => '— ${ben.kira(k) * 2}M (çift)');
     if (renk == null) return false;
     return game.kiraOyna(ben, c, renk, cift: cift);
   }
@@ -312,9 +300,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _mesaj('Rakipte alınabilir tapu yok (tam setler korunur).');
       return false;
     }
-    final sec = await pickCards(context, title: '🕵️ Hangi tapuyu alıyorsun?', cards: hedefler, exact: 1, max: 1, iptalOlur: true);
-    if (sec.isEmpty) return false;
-    return game.slyDeal(ben, c, sec.first);
+    final h = await _kartSec('🕵️ Hangi tapuyu alıyorsun?', hedefler);
+    if (h == null) return false;
+    return game.slyDeal(ben, c, h);
   }
 
   Future<bool> _forcedDeal(GameCard c) async {
@@ -324,11 +312,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _mesaj('Değiş tokuş için iki tarafta da tamamlanmamış setten tapu olmalı.');
       return false;
     }
-    final o = await pickCards(context, title: '🔁 Rakipten hangisini alıyorsun?', cards: onunkiler, exact: 1, max: 1, iptalOlur: true);
-    if (o.isEmpty || !mounted) return false;
-    final b = await pickCards(context, title: '🔁 Karşılığında hangisini veriyorsun?', cards: benimkiler, exact: 1, max: 1, iptalOlur: true);
-    if (b.isEmpty) return false;
-    return game.forcedDeal(ben, c, b.first, o.first);
+    final o = await _kartSec('🔁 Rakipten hangisini alıyorsun?', onunkiler);
+    if (o == null || !mounted) return false;
+    final b = await _kartSec('🔁 Karşılığında hangisini veriyorsun?', benimkiler);
+    if (b == null) return false;
+    return game.forcedDeal(ben, c, b, o);
   }
 
   Future<bool> _dealBreaker(GameCard c) async {
@@ -337,7 +325,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _mesaj('Rakibin tam seti yok.');
       return false;
     }
-    final s = await pickColor(context, '💥 Hangi tam seti alıyorsun?', setler, iptalOlur: true);
+    final s = await _renkSec('💥 Hangi tam seti alıyorsun?', setler);
     if (s == null) return false;
     return game.dealBreaker(ben, c, s);
   }
@@ -354,13 +342,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       _mesaj(c.action == ActionType.house ? 'Evsiz tam setin yok.' : 'Evli (otelsiz) tam setin yok.');
       return false;
     }
-    final s = await pickColor(context, '🏗️ Hangi sete?', setler, iptalOlur: true);
+    final s = await _renkSec('🏗️ Hangi sete?', setler);
     if (s == null) return false;
     return game.binaKoy(ben, c, s);
   }
 
   Future<void> _turBitir() async {
     if (!_hazir || game.aktif != ben || game.kazanan != null || _botOynuyor) return;
+    setState(() => _acikDeste = null);
     await game.turBitir();
     if (mounted) setState(() {});
     _botKontrol();
@@ -402,7 +391,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 Expanded(child: _benimAlanim()),
                 _el(),
               ]),
-              // uçan kartlar
               for (final u in _ucanlar)
                 AnimatedBuilder(
                   animation: u.ctl,
@@ -418,21 +406,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     );
                   },
                 ),
-              // orta etiket
               if (_banner != null)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
+                Positioned.fill(
                   child: IgnorePointer(
                     child: Center(
                       child: Container(
                         margin: const EdgeInsets.only(top: 190),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(12)),
-                        child: Text(_banner!,
-                            style: const TextStyle(color: Colors.amber, fontSize: 16, fontWeight: FontWeight.w800)),
+                        child: Text(_banner!, style: const TextStyle(color: Colors.amber, fontSize: 16, fontWeight: FontWeight.w800)),
                       ),
                     ),
                   ),
@@ -455,16 +437,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           const Text('Bot', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
           const Spacer(),
           Row(key: _kBotEl, children: [
-            for (var i = 0; i < bot.hand.length.clamp(0, 8); i++)
-              const Padding(padding: EdgeInsets.only(left: 2), child: CardBack(w: 16)),
+            for (var i = 0; i < bot.hand.length.clamp(0, 8); i++) const Padding(padding: EdgeInsets.only(left: 2), child: CardBack(w: 16)),
             const SizedBox(width: 6),
             Text('${bot.hand.length} kart', style: const TextStyle(color: Colors.white70, fontSize: 12)),
           ]),
-          const SizedBox(width: 12),
-          Text('🏦 ${bot.bankaToplam}M', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
         ]),
         const SizedBox(height: 6),
-        Container(key: _kBotSet, child: _setSatiri(bot, kucuk: true)),
+        Container(key: _kBotSet, child: _desteler(bot, kucuk: true)),
       ]),
     );
   }
@@ -475,19 +454,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Row(children: [
-        // deste
         Column(key: _kDeck, mainAxisSize: MainAxisSize.min, children: [
           const CardBack(w: 34),
           Text('${game.deck.length}', style: const TextStyle(color: Colors.white70, fontSize: 10)),
         ]),
         const SizedBox(width: 6),
-        // atılanlar / orta
-        SizedBox(
-          key: _kMerkez,
-          width: 34,
-          height: 34 * 1.45 + 14,
-          child: ust == null ? const SizedBox() : Opacity(opacity: 0.85, child: CardView(ust, w: 34)),
-        ),
+        SizedBox(key: _kMerkez, width: 34, height: 34 * 1.45 + 14, child: ust == null ? const SizedBox() : Opacity(opacity: 0.85, child: CardView(ust, w: 34))),
         const SizedBox(width: 10),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -513,77 +485,56 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       child: SingleChildScrollView(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            const Text('Setlerin', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+            const Text('Masan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
             const Spacer(),
             Text('Tam set: ${ben.tamSetSayisi}/3', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w700)),
           ]),
           const SizedBox(height: 6),
-          Container(key: _kBenSet, constraints: const BoxConstraints(minHeight: 40), child: _setSatiri(ben)),
-          const SizedBox(height: 10),
-          Row(children: [
-            const Text('Bankan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-            const SizedBox(width: 8),
-            Text('${ben.bankaToplam}M', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w800)),
-          ]),
-          const SizedBox(height: 4),
-          SizedBox(
-            key: _kBenBanka,
-            height: 58,
-            child: ben.bank.isEmpty
-                ? const Align(alignment: Alignment.centerLeft, child: Text('boş', style: TextStyle(color: Colors.white38)))
-                : ListView(scrollDirection: Axis.horizontal, children: [
-                    for (final c in ben.bank) Padding(padding: const EdgeInsets.only(right: 4), child: CardView(c, w: 40)),
-                  ]),
-          ),
+          _desteler(ben),
         ]),
       ),
     );
   }
 
-  Widget _setSatiri(Player p, {bool kucuk = false}) {
-    if (p.props.isEmpty) {
-      return Text('Henüz tapu yok', style: TextStyle(color: Colors.white38, fontSize: kucuk ? 11 : 13));
-    }
+  /// Oyuncunun masası: renk başına bir tapu destesi + banka destesi. Dokununca deste yana açılır.
+  Widget _desteler(Player p, {bool kucuk = false}) {
     final renkler = PColor.values.where((c) => p.propsOf(c).isNotEmpty).toList();
-    return Wrap(spacing: 6, runSpacing: 6, children: [for (final c in renkler) _setKutusu(p, c, kucuk)]);
-  }
-
-  Widget _setKutusu(Player p, PColor c, bool kucuk) {
-    final n = p.propsOf(c).length;
-    final tam = p.setTam(c);
-    final binalar = p.binalar[c] ?? const <GameCard>[];
-    final w = kucuk ? 30.0 : 42.0;
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: tam ? 0.22 : 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: tam ? Colors.amber : Colors.white24, width: tam ? 2 : 1),
+    final kim = p == ben ? 'ben' : 'bot';
+    final w = kucuk ? 34.0 : 52.0;
+    if (renkler.isEmpty && p.bank.isEmpty) {
+      return Text('Henüz kart yok', style: TextStyle(color: Colors.white38, fontSize: kucuk ? 11 : 13));
+    }
+    final ogeler = <Widget>[
+      for (final c in renkler)
+        _Deste(
+          kartlar: [...p.propsOf(c), ...(p.binalar[c] ?? const <GameCard>[])],
+          w: w,
+          acik: _acikDeste == '$kim:${c.name}',
+          ustBaslik: '${c.ad} ${p.propsOf(c).length}/${c.setBoyu}${p.setTam(c) ? ' ✓' : ''}',
+          altBaslik: 'kira ${p.kira(c)}M',
+          vurgu: p.setTam(c),
+          renk: c.renk,
+          onTap: () => setState(() => _acikDeste = _acikDeste == '$kim:${c.name}' ? null : '$kim:${c.name}'),
+          onKartTap: p == ben ? (k) => k.isWild ? _jokerTasi(k) : null : null,
+        ),
+      // banka destesi
+      KeyedSubtree(
+        key: p == ben ? _kBenBanka : null,
+        child: _Deste(
+          kartlar: p.bank,
+          w: w,
+          acik: _acikDeste == '$kim:banka',
+          ustBaslik: '🏦 ${p.bank.length} kart',
+          altBaslik: '${p.bankaToplam}M',
+          vurgu: false,
+          renk: const Color(0xFF1E7B3A),
+          onTap: () => setState(() => _acikDeste = _acikDeste == '$kim:banka' ? null : '$kim:banka'),
+        ),
       ),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          CircleAvatar(backgroundColor: c.renk, radius: kucuk ? 5 : 6),
-          const SizedBox(width: 4),
-          Text('${c.ad} $n/${c.setBoyu}${tam ? ' ✓' : ''}',
-              style: TextStyle(color: Colors.white, fontSize: kucuk ? 10 : 12, fontWeight: FontWeight.w700)),
-          if (!kucuk) ...[
-            const SizedBox(width: 6),
-            Text('kira ${p.kira(c)}M', style: const TextStyle(color: Colors.white70, fontSize: 10)),
-          ],
-        ]),
-        if (!kucuk) const SizedBox(height: 3),
-        if (!kucuk)
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            for (final k in p.propsOf(c))
-              Padding(
-                padding: const EdgeInsets.only(right: 3),
-                child: CardView(k, w: w, onTap: (p == ben && k.isWild) ? () => _jokerTasi(k) : null),
-              ),
-            for (final b in binalar) Padding(padding: const EdgeInsets.only(right: 3), child: CardView(b, w: w)),
-          ]),
-        if (kucuk && binalar.isNotEmpty)
-          Text(binalar.map((b) => b.action == ActionType.house ? '🏠' : '🏨').join(), style: const TextStyle(fontSize: 10)),
-      ]),
+    ];
+    return Container(
+      key: p == ben ? _kBenSet : null,
+      child: Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.end, children: ogeler),
     );
   }
 
@@ -599,13 +550,93 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           height: 112,
           child: ListView(scrollDirection: Axis.horizontal, children: [
             for (final c in ben.hand)
-              Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: CardView(c, w: 74, dim: !_sirada, onTap: () => _kartTikla(c)),
-              ),
+              Padding(padding: const EdgeInsets.only(right: 6), child: CardView(c, w: 74, dim: !_sirada, onTap: () => _kartTikla(c))),
           ]),
         ),
       ]),
+    );
+  }
+}
+
+/// Üst üste konmuş kart destesi; [acik] ise kartlar yana yelpaze gibi açılır.
+class _Deste extends StatelessWidget {
+  const _Deste({
+    required this.kartlar,
+    required this.w,
+    required this.acik,
+    required this.ustBaslik,
+    required this.altBaslik,
+    required this.vurgu,
+    required this.renk,
+    required this.onTap,
+    this.onKartTap,
+  });
+  final List<GameCard> kartlar;
+  final double w;
+  final bool acik;
+  final String ustBaslik, altBaslik;
+  final bool vurgu;
+  final Color renk;
+  final VoidCallback onTap;
+  final void Function(GameCard)? onKartTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final h = w * 1.45;
+    final n = kartlar.length;
+    final gorunen = n.clamp(0, 4);
+    Widget kapali = SizedBox(
+      width: w + 3.0 * (gorunen - 1) + 2,
+      height: h + 3.0 * (gorunen - 1),
+      child: Stack(children: [
+        for (var i = 0; i < gorunen; i++)
+          Positioned(left: 3.0 * i, top: 3.0 * (gorunen - 1 - i), child: CardView(kartlar[n - gorunen + i], w: w)),
+        if (n > 0)
+          Positioned(
+            right: 0,
+            top: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.white54)),
+              child: Text('$n', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+            ),
+          ),
+      ]),
+    );
+    Widget acikGorunum = SizedBox(
+      height: h,
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        for (var i = 0; i < n; i++)
+          Padding(
+            padding: EdgeInsets.only(right: i == n - 1 ? 0 : 3),
+            child: GestureDetector(
+              onTap: onKartTap == null ? null : () => onKartTap!(kartlar[i]),
+              child: CardView(kartlar[i], w: w, selected: kartlar[i].isWild && onKartTap != null),
+            ),
+          ),
+      ]),
+    );
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: vurgu ? 0.22 : (acik ? 0.14 : 0.06)),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: vurgu ? Colors.amber : (acik ? Colors.white70 : Colors.white24), width: vurgu ? 2 : 1),
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            CircleAvatar(backgroundColor: renk, radius: 5),
+            const SizedBox(width: 4),
+            Text(ustBaslik, style: TextStyle(color: Colors.white, fontSize: w < 40 ? 10 : 12, fontWeight: FontWeight.w700)),
+          ]),
+          const SizedBox(height: 3),
+          acik ? acikGorunum : kapali,
+          const SizedBox(height: 2),
+          Text(altBaslik, style: TextStyle(color: Colors.white70, fontSize: w < 40 ? 9 : 10)),
+        ]),
+      ),
     );
   }
 }

@@ -3,7 +3,7 @@ import '../model/cards.dart';
 import '../model/game.dart';
 
 /// Basit ama mantıklı bot: set tamamlamaya, kira/çalma ile rakibi zayıflatmaya öncelik verir.
-class BotDecider implements Decider {
+class BotDecider extends Decider {
   @override
   Future<bool> justSayNo(Game g, Player me, String aciklama) async {
     if (aciklama.contains('Haciz') || aciklama.contains('Tapu Devri') || aciklama.contains('Değiş Tokuş')) {
