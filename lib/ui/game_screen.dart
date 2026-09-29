@@ -191,16 +191,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Future<void> _kartTikla(GameCard c) async {
     if (!_sirada) return _mesaj('Sıra sende değil.');
     if (game.playsLeft <= 0) return _mesaj('Hamle hakkın bitti.');
-    // Joker olmayan tapu ve para kartları menüsüz, tek dokunuşla oynanır.
-    if (c.kind == CardKind.property || c.isMoney) {
+    // Tapu (joker dahil) ve para kartları menüsüz, tek dokunuşla oynanır; joker yalnızca rengi sorar.
+    if (c.isProperty || c.isMoney) {
       final ok = c.isMoney ? await game.bankayaKoy(ben, c) : await game.mulkOyna(ben, c);
       if (!ok && mounted) _mesaj('Bu hamle yapılamadı.');
       return _sonra();
     }
     final secenekler = <_Secenek>[];
-    if (c.isProperty) {
-      secenekler.add(_Secenek('🏠 Tapu olarak koy (renk seç)', () => game.mulkOyna(ben, c)));
-    }
     if (c.isMoney) {
       secenekler.add(_Secenek('🏦 Bankaya koy (${c.value}M)', () => game.bankayaKoy(ben, c)));
     }
