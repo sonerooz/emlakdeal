@@ -443,7 +443,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           ]),
         ]),
         const SizedBox(height: 6),
-        Container(key: _kBotSet, child: _desteler(bot, kucuk: true)),
+        // Rakibin masası: sınırlı yükseklik, gerekirse kaydırılır (benim masam sabit kalsın diye)
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 118),
+          child: SingleChildScrollView(child: Container(key: _kBotSet, child: _desteler(bot, kucuk: true))),
+        ),
       ]),
     );
   }
@@ -482,17 +486,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       margin: const EdgeInsets.symmetric(horizontal: 8),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(12)),
-      child: SingleChildScrollView(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Text('Masan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-            const Spacer(),
-            Text('Tam set: ${ben.tamSetSayisi}/3', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w700)),
-          ]),
-          const SizedBox(height: 6),
-          _desteler(ben),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Text('Masan', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+          const Spacer(),
+          Text('Tam set: ${ben.tamSetSayisi}/3', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w700)),
         ]),
-      ),
+        const SizedBox(height: 6),
+        Expanded(child: Align(alignment: Alignment.topLeft, child: _desteler(ben))),
+      ]),
     );
   }
 
