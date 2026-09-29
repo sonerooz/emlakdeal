@@ -123,7 +123,7 @@ class CardView extends StatelessWidget {
 
   Widget _tapu(PColor c) {
     return Column(children: [
-      _bant(c.renk, c.ad, hh: w * 0.40),
+      _bant(c.renk, c.kisaAd, hh: w * 0.40),
       _tapuEtiketi(),
       Expanded(
         child: Padding(
@@ -154,7 +154,7 @@ class CardView extends StatelessWidget {
           child: Container(
             color: aktif ? k.renk : k.renk.withValues(alpha: 0.55),
             alignment: Alignment.center,
-            child: Text(k.ad,
+            child: Text(k.kisaAd,
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 style: TextStyle(
@@ -196,7 +196,7 @@ class CardView extends StatelessWidget {
                   margin: EdgeInsets.all(w * 0.06),
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(color: card.wildColor!.renk, borderRadius: BorderRadius.circular(6)),
-                  child: Text('▲ ${card.wildColor!.ad}',
+                  child: Text('▲ ${card.wildColor!.kisaAd}',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: _fs * 0.78, fontWeight: FontWeight.w800, color: _koyu(card.wildColor!.renk) ? Colors.white : Colors.black87)),
                 ),
@@ -277,7 +277,7 @@ class CardView extends StatelessWidget {
           decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.92), borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.black87)),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Text('KİRA', style: TextStyle(fontSize: _fs * 1.1, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Colors.black87)),
-            Text(joker ? 'her renk' : '${a!.ad}\n${b!.ad}',
+            Text(joker ? 'her renk' : '${a!.kisaAd}\n${b!.kisaAd}',
                 textAlign: TextAlign.center, style: TextStyle(fontSize: _fs * 0.62, fontWeight: FontWeight.w700, color: Colors.black87, height: 1.05)),
           ]),
         ),

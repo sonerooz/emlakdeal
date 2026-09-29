@@ -15,7 +15,21 @@ extension PColorX on PColor {
         PColor.green: 'Yeşil',
         PColor.darkBlue: 'Lacivert',
         PColor.railroad: 'Siyah',
-        PColor.utility: 'Hizmet',
+        PColor.utility: 'Açık Yeşil',
+      }[this]!;
+
+  /// Kart üstünde kullanılan kısa ad (uzun adlar sığmıyor).
+  String get kisaAd => const {
+        PColor.brown: 'Kahve',
+        PColor.lightBlue: 'A. Mavi',
+        PColor.pink: 'Pembe',
+        PColor.orange: 'Turuncu',
+        PColor.red: 'Kırmızı',
+        PColor.yellow: 'Sarı',
+        PColor.green: 'Yeşil',
+        PColor.darkBlue: 'Lacivert',
+        PColor.railroad: 'Siyah',
+        PColor.utility: 'A. Yeşil',
       }[this]!;
 
   Color get renk => const {
@@ -28,7 +42,7 @@ extension PColorX on PColor {
         PColor.green: Color(0xFF1E9E4A),
         PColor.darkBlue: Color(0xFF1F3F9E),
         PColor.railroad: Color(0xFF2B2B2B),
-        PColor.utility: Color(0xFF9AA6AD),
+        PColor.utility: Color(0xFFB5E3B0),
       }[this]!;
 
   /// Seti tamamlamak için gereken mülk sayısı.

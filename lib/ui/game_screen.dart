@@ -506,7 +506,21 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (renkler.isEmpty && p.bank.isEmpty) {
       return Text('Henüz kart yok', style: TextStyle(color: Colors.white38, fontSize: kucuk ? 11 : 13));
     }
+    final banka = KeyedSubtree(
+      key: p == ben ? _kBenBanka : null,
+      child: _Deste(
+        kartlar: p.bank,
+        w: w,
+        acik: _acikDeste == '$kim:banka',
+        ustBaslik: '🏦 ${p.bank.length} kart',
+        altBaslik: '${p.bankaToplam}M',
+        vurgu: false,
+        renk: const Color(0xFF1E7B3A),
+        onTap: () => setState(() => _acikDeste = _acikDeste == '$kim:banka' ? null : '$kim:banka'),
+      ),
+    );
     final ogeler = <Widget>[
+      if (p == ben) banka, // benim masamda banka en solda
       for (final c in renkler)
         _Deste(
           kartlar: [...p.propsOf(c), ...(p.binalar[c] ?? const <GameCard>[])],
@@ -519,20 +533,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           onTap: () => setState(() => _acikDeste = _acikDeste == '$kim:${c.name}' ? null : '$kim:${c.name}'),
           onKartTap: p == ben ? (k) => k.isWild ? _jokerTasi(k) : null : null,
         ),
-      // banka destesi
-      KeyedSubtree(
-        key: p == ben ? _kBenBanka : null,
-        child: _Deste(
-          kartlar: p.bank,
-          w: w,
-          acik: _acikDeste == '$kim:banka',
-          ustBaslik: '🏦 ${p.bank.length} kart',
-          altBaslik: '${p.bankaToplam}M',
-          vurgu: false,
-          renk: const Color(0xFF1E7B3A),
-          onTap: () => setState(() => _acikDeste = _acikDeste == '$kim:banka' ? null : '$kim:banka'),
-        ),
-      ),
+      if (p != ben) banka, // botun masasında banka sonda
     ];
     return Container(
       key: p == ben ? _kBenSet : null,
