@@ -142,7 +142,15 @@ class Game extends ChangeNotifier {
   bool turBasladi = false;
 
   Player get aktif => players[current];
-  Player rakip(Player p) => players.firstWhere((x) => x != p);
+  List<Player> rakipler(Player p) => players.where((x) => x != p).toList();
+
+  /// Bir masadaki kartın sahibi (mülk/bina/banka).
+  Player? sahibi(GameCard c) {
+    for (final p in players) {
+      if (p.varliklar.contains(c)) return p;
+    }
+    return null;
+  }
 
   void _log(String s) {
     log.add(s);
@@ -399,10 +407,9 @@ class Game extends ChangeNotifier {
     return true;
   }
 
-  Future<bool> borcTahsildari(Player p, GameCard c) async {
-    if (!_oynayabilir() || c.action != ActionType.debtCollector) return false;
+  Future<bool> borcTahsildari(Player p, GameCard c, Player r) async {
+    if (!_oynayabilir() || c.action != ActionType.debtCollector || r == p) return false;
     await _aksiyonuAt(p, c);
-    final r = rakip(p);
     _log('${p.name} Borç Tahsildarı: ${r.name} 5M ödemeli.');
     await _talep(p, r, 5, 'Borç Tahsildarı (5M)', 'Borç Tahsildarı');
     _harca();
@@ -432,9 +439,10 @@ class Game extends ChangeNotifier {
       await _aksiyonuAt(p, cift, 'Çift Kira');
       tutar *= 2;
     }
-    final r = rakip(p);
-    _log('${p.name} ${renk.ad} kirası: ${tutar}M${cift != null ? ' (çift)' : ''}.');
-    await _talep(p, r, tutar, '${renk.ad} kirası (${tutar}M)', 'kira');
+    _log('${p.name} ${renk.ad} kirası: ${tutar}M${cift != null ? ' (çift)' : ''} — herkes öder.');
+    for (final r in rakipler(p)) {
+      await _talep(p, r, tutar, '${renk.ad} kirası (${tutar}M)', 'kira');
+    }
     _harca(cift != null ? 2 : 1);
     return true;
   }
@@ -447,8 +455,8 @@ class Game extends ChangeNotifier {
 
   Future<bool> slyDeal(Player p, GameCard c, GameCard hedefMulk) async {
     if (!_oynayabilir() || c.action != ActionType.slyDeal) return false;
-    final r = rakip(p);
-    if (!calinabilir(r).contains(hedefMulk)) return false;
+    final r = sahibi(hedefMulk);
+    if (r == null || r == p || !calinabilir(r).contains(hedefMulk)) return false;
     await _aksiyonuAt(p, c);
     _log('${p.name} Tapu Devri: ${hedefMulk.ad} çalmak istiyor.');
     if (!await _jsnZinciri(p, r, 'Tapu Devri (${hedefMulk.ad})')) {
@@ -464,8 +472,8 @@ class Game extends ChangeNotifier {
 
   Future<bool> forcedDeal(Player p, GameCard c, GameCard benimki, GameCard onunki) async {
     if (!_oynayabilir() || c.action != ActionType.forcedDeal) return false;
-    final r = rakip(p);
-    if (!calinabilir(r).contains(onunki) || !calinabilir(p).contains(benimki)) return false;
+    final r = sahibi(onunki);
+    if (r == null || r == p || !calinabilir(r).contains(onunki) || !calinabilir(p).contains(benimki)) return false;
     await _aksiyonuAt(p, c);
     _log('${p.name} Değiş Tokuş: ${benimki.ad} ↔ ${onunki.ad}.');
     if (!await _jsnZinciri(p, r, 'Değiş Tokuş (${onunki.ad})')) {
@@ -482,9 +490,8 @@ class Game extends ChangeNotifier {
     return true;
   }
 
-  Future<bool> dealBreaker(Player p, GameCard c, PColor set) async {
-    if (!_oynayabilir() || c.action != ActionType.dealBreaker) return false;
-    final r = rakip(p);
+  Future<bool> dealBreaker(Player p, GameCard c, Player r, PColor set) async {
+    if (!_oynayabilir() || c.action != ActionType.dealBreaker || r == p) return false;
     if (!r.setTam(set)) return false;
     await _aksiyonuAt(p, c);
     _log('${p.name} Haciz: ${set.ad} setini istiyor!');

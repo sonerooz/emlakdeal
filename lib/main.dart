@@ -19,8 +19,15 @@ class MonoDealApp extends StatelessWidget {
       );
 }
 
-class MenuScreen extends StatelessWidget {
+class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
+  @override
+  State<MenuScreen> createState() => _MenuScreenState();
+}
+
+class _MenuScreenState extends State<MenuScreen> {
+  int _bot = 1;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -34,15 +41,38 @@ class MenuScreen extends StatelessWidget {
               const Text('MONOPOLY', style: TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 4)),
               const Text('DEAL', style: TextStyle(color: Colors.amber, fontSize: 56, fontWeight: FontWeight.w900, letterSpacing: 8, height: 0.9)),
               const SizedBox(height: 12),
-              const Text('Kart oyunu · 1v1', style: TextStyle(color: Colors.white70, fontSize: 16)),
-              const SizedBox(height: 48),
+              const Text('Kart oyunu', style: TextStyle(color: Colors.white70, fontSize: 16)),
+              const SizedBox(height: 40),
+              const Text('Kaç bota karşı?', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 10),
+              SegmentedButton<int>(
+                style: SegmentedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  selectedForegroundColor: Colors.black,
+                  selectedBackgroundColor: Colors.amber,
+                  side: const BorderSide(color: Colors.white54),
+                ),
+                segments: const [
+                  ButtonSegment(value: 1, label: Text('1 bot')),
+                  ButtonSegment(value: 2, label: Text('2 bot')),
+                  ButtonSegment(value: 3, label: Text('3 bot')),
+                  ButtonSegment(value: 4, label: Text('4 bot')),
+                ],
+                selected: {_bot},
+                onSelectionChanged: (s) => setState(() => _bot = s.first),
+              ),
+              const SizedBox(height: 6),
+              Text('${_bot + 1} oyuncu · sen + $_bot bot', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: 28),
               FilledButton.icon(
                 style: FilledButton.styleFrom(
-                    backgroundColor: Colors.amber, foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16), textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GameScreen())),
+                    backgroundColor: Colors.amber,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => GameScreen(botSayisi: _bot))),
                 icon: const Icon(Icons.play_arrow),
-                label: const Text('Bot\'a karşı oyna'),
+                label: const Text('Oyna'),
               ),
               const SizedBox(height: 16),
               OutlinedButton.icon(
@@ -68,14 +98,15 @@ class _KurallarDlg extends StatelessWidget {
           child: Text(
             '• Amaç: farklı renkte 3 TAM tapu seti toplamak.\n'
             '• Her tur 2 kart çek (elin boşsa 5), en fazla 3 hamle; 3. hamlede tur kendiliğinden biter.\n'
-            '• Tapu ve para kartlarına tek dokunuş yeter (tapu sete, para bankaya). Aksiyonlarda menü açılır.\n'
-            '• Bankaya konan aksiyon/kira kartı para kartına dönüşür, geri alınamaz.\n'
-            '• Kira: elindeki kira kartıyla, o renkte tapun varsa rakipten kira al. Çift Kira ile 2 katı (2 hamle).\n'
+            '• Tapu ve para kartlarına tek dokunuş yeter (tapu sete, para bankaya). Hamle kartlarında menü açılır.\n'
+            '• Elinde soluk görünen kartların asıl işlevi şu an oynanamaz (yine de bankaya konabilir).\n'
+            '• Bankaya konan hamle/kira kartı para kartına dönüşür, geri alınamaz.\n'
+            '• Kira: elindeki kira kartıyla, o renkte tapun varsa HERKESTEN kira al. Çift Kira ile 2 katı (2 hamle).\n'
             '• Ödeme banka + tapulardan yapılır, elden yapılmaz. Yetmiyorsa her şeyini verirsin.\n'
-            '• Tapu Devri: tamamlanmamış setten tapu al. Değiş Tokuş: takas. Haciz: TAM seti al.\n'
-            '• Reddet: sana oynanan aksiyonu iptal eder (rakip de Reddet ile karşılık verebilir).\n'
-            '• Ev (+3M) ve Otel (+4M) sadece tam setlere (tren/hizmet hariç).\n'
-            '• Joker tapular istediğin renkte sayılır; kendi turunda dokunup rengini değiştirebilirsin.\n'
+            '• Tapu Devri: tamamlanmamış setten tapu al. Değiş Tokuş: takas. Haciz: TAM seti al. Borç Tahsildarı: seçtiğin birinden 5M.\n'
+            '• Reddet: sana oynanan hamleyi iptal eder (karşı taraf da Reddet ile karşılık verebilir).\n'
+            '• Ev (+3M) ve Otel (+4M) sadece tam setlere (Siyah / Açık Yeşil hariç).\n'
+            '• Joker tapular istediğin renkte sayılır; kendi turunda destede jokere dokunup rengini değiştirebilirsin.\n'
             '• Tur sonunda elinde en fazla 7 kart kalabilir.',
             style: TextStyle(height: 1.4),
           ),

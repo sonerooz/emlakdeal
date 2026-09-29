@@ -2,7 +2,8 @@ import 'dart:math';
 import '../model/cards.dart';
 import '../model/game.dart';
 
-/// Basit ama mantıklı bot: set tamamlamaya, kira/çalma ile rakibi zayıflatmaya öncelik verir.
+/// Basit ama mantıklı bot: set tamamlamaya, kira/çalma ile rakipleri zayıflatmaya öncelik verir.
+/// Birden fazla rakipte hedefi (en zengin / en tehlikeli) kendisi seçer.
 class BotDecider extends Decider {
   @override
   Future<bool> justSayNo(Game g, Player me, String aciklama) async {
@@ -16,7 +17,6 @@ class BotDecider extends Decider {
 
   @override
   Future<List<GameCard>> ode(Game g, Player me, int tutar, Player alacakli) async {
-    // Öncelik: banka (küçükten büyüğe), binalar, tamamlanmamış set mülkleri (ucuzdan), tam set mülkleri.
     final banka = List.of(me.bank)..sort((a, b) => a.paraDegeri.compareTo(b.paraDegeri));
     final binalar = [for (final l in me.binalar.values) ...l];
     final eksik = [
@@ -28,17 +28,15 @@ class BotDecider extends Decider {
         if (me.setTam(e.key)) ...e.value
     ]..sort((a, b) => a.paraDegeri.compareTo(b.paraDegeri));
     final aday = [...banka, ...binalar, ...eksik, ...tam];
-    final secim = <GameCard>[];
-    var toplam = 0;
-    // Önce en büyük para kartı tutarı tek başına karşılıyorsa onu ver (az fazla ödeme)
     final tek = banka.where((c) => c.paraDegeri >= tutar).toList();
     if (tek.isNotEmpty) return [tek.first];
+    final secim = <GameCard>[];
+    var toplam = 0;
     for (final c in aday) {
       if (toplam >= tutar) break;
       secim.add(c);
       toplam += c.paraDegeri;
     }
-    // fazla ödemeyi azalt: çıkarınca hâlâ yetiyorsa çıkar
     for (final c in List.of(secim)) {
       if (toplam - c.paraDegeri >= tutar) {
         secim.remove(c);
@@ -50,7 +48,6 @@ class BotDecider extends Decider {
 
   @override
   Future<PColor> jokerRengi(Game g, Player me, GameCard joker, List<PColor> secenekler) async {
-    // En çok yaklaştığı (tamamlanmamış) seti tercih et; yoksa en yüksek kira.
     PColor? best;
     var bestSkor = -1.0;
     for (final c in secenekler) {
@@ -81,11 +78,10 @@ class BotDecider extends Decider {
 
   // ----------------------------------------------------------- tur
   Future<void> turOyna(Game g, Player me) async {
-    final r = g.rakip(me);
     var guard = 0;
     while (g.playsLeft > 0 && g.kazanan == null && guard++ < 10) {
       await Future.delayed(const Duration(milliseconds: 650));
-      if (await _birHamle(g, me, r)) continue;
+      if (await _birHamle(g, me)) continue;
       break;
     }
     await Future.delayed(const Duration(milliseconds: 500));
@@ -99,20 +95,36 @@ class BotDecider extends Decider {
     return null;
   }
 
-  Future<bool> _birHamle(Game g, Player me, Player r) async {
-    // 1) Deal Breaker
+  /// En zengin rakip (para talebi hedefi).
+  Player _enZengin(Game g, Player me) =>
+      g.rakipler(me).reduce((a, b) => a.varlikToplam >= b.varlikToplam ? a : b);
+
+  Future<bool> _birHamle(Game g, Player me) async {
+    final rakipler = g.rakipler(me);
+    // 1) Haciz: en değerli tam sete sahip rakip
     final db = _kart(me, ActionType.dealBreaker);
-    if (db != null && r.tamSetler.isNotEmpty) {
-      final set = r.tamSetler.reduce((a, b) => a.kira.last >= b.kira.last ? a : b);
-      return g.dealBreaker(me, db, set);
+    if (db != null) {
+      Player? hedef;
+      PColor? set;
+      var best = -1;
+      for (final r in rakipler) {
+        for (final s in r.tamSetler) {
+          if (s.kira.last > best) {
+            best = s.kira.last;
+            hedef = r;
+            set = s;
+          }
+        }
+      }
+      if (hedef != null) return g.dealBreaker(me, db, hedef, set!);
     }
-    // 2) Mülk oyna (seti en çok ilerleten)
+    // 2) Tapu oyna (seti en çok ilerleten)
     final mulkler = me.hand.where((c) => c.isProperty).toList();
     if (mulkler.isNotEmpty) {
       mulkler.sort((a, b) => _mulkSkor(me, b).compareTo(_mulkSkor(me, a)));
       return g.mulkOyna(me, mulkler.first);
     }
-    // 3) Kira
+    // 3) Kira (herkesten alınır)
     GameCard? enIyiKira;
     PColor? enIyiRenk;
     var enIyi = 0;
@@ -127,19 +139,20 @@ class BotDecider extends Decider {
         }
       }
     }
-    if (enIyiKira != null && enIyi > 0 && r.varlikToplam > 0) {
+    final rakipVarlik = rakipler.fold(0, (s, r) => s + r.varlikToplam);
+    if (enIyiKira != null && enIyi > 0 && rakipVarlik > 0) {
       final cift = _kart(me, ActionType.doubleRent);
       final ciftKullan = cift != null && g.playsLeft >= 2 && enIyi >= 2;
       return g.kiraOyna(me, enIyiKira, enIyiRenk!, cift: ciftKullan ? cift : null);
     }
-    // 4) Sly Deal
+    // 4) Tapu Devri: tüm rakiplerin alınabilir tapuları arasından en işe yarayan
     final sd = _kart(me, ActionType.slyDeal);
-    final calinabilir = g.calinabilir(r);
+    final calinabilir = [for (final r in rakipler) ...g.calinabilir(r)];
     if (sd != null && calinabilir.isNotEmpty) {
       calinabilir.sort((a, b) => _calmaSkor(me, b).compareTo(_calmaSkor(me, a)));
       return g.slyDeal(me, sd, calinabilir.first);
     }
-    // 5) Forced Deal (sadece set tamamlıyorsa)
+    // 5) Değiş Tokuş (sadece set tamamlıyorsa)
     final fd = _kart(me, ActionType.forcedDeal);
     if (fd != null && calinabilir.isNotEmpty) {
       final benimkiler = g.calinabilir(me);
@@ -154,11 +167,14 @@ class BotDecider extends Decider {
         }
       }
     }
-    // 6-7) Borç tahsildarı / doğum günü
+    // 6-7) Borç tahsildarı (en zengine) / doğum günü
     final dc = _kart(me, ActionType.debtCollector);
-    if (dc != null && r.varlikToplam >= 2) return g.borcTahsildari(me, dc);
+    if (dc != null) {
+      final hedef = _enZengin(g, me);
+      if (hedef.varlikToplam >= 2) return g.borcTahsildari(me, dc, hedef);
+    }
     final bd = _kart(me, ActionType.birthday);
-    if (bd != null && r.varlikToplam >= 1) return g.dogumGunu(me, bd);
+    if (bd != null && rakipVarlik >= 1) return g.dogumGunu(me, bd);
     // 8) Ev/otel
     for (final t in [ActionType.house, ActionType.hotel]) {
       final b = _kart(me, t);
@@ -167,12 +183,11 @@ class BotDecider extends Decider {
         if (await g.binaKoy(me, b, set)) return true;
       }
     }
-    // 9) Pass Go
+    // 9) 2 Kart Çek
     final pg = _kart(me, ActionType.passGo);
     if (pg != null) return g.passGo(me, pg);
     // 10) Para bankaya (büyükten)
-    final para = me.hand.where((c) => c.isMoney).toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final para = me.hand.where((c) => c.isMoney).toList()..sort((a, b) => b.value.compareTo(a.value));
     if (para.isNotEmpty) return g.bankayaKoy(me, para.first);
     // 11) El kalabalıksa işe yaramayan aksiyonu bankaya
     if (me.hand.length > 5) {
