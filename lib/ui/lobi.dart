@@ -21,6 +21,8 @@ class _LobiEkraniState extends State<LobiEkrani> {
   StreamSubscription? _abone;
   Map<String, dynamic>? _oda;
   int _bot = 1;
+  int _sure = 60;
+  bool _hazir = false;
   bool _mesgul = false;
   String? _hata;
 
@@ -65,6 +67,7 @@ class _LobiEkraniState extends State<LobiEkrani> {
         setState(() {
           _oda = m;
           _bot = m['bot'] as int;
+          _sure = (m['sure'] as int?) ?? 60;
         });
       case 'hata':
         setState(() => _hata = m['m'] as String?);
@@ -135,6 +138,9 @@ class _LobiEkraniState extends State<LobiEkrani> {
                 leading: Icon(Icons.person, color: (o['bagli'] as bool) ? Colors.white : Colors.white30),
                 title: Text(o['ad'] as String, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                 subtitle: o['ad'] == oda['sahip'] ? const Text('Oda sahibi', style: TextStyle(color: Colors.amber, fontSize: 12)) : null,
+                trailing: (o['hazir'] as bool? ?? false)
+                    ? const Icon(Icons.check_circle, color: Colors.greenAccent)
+                    : const Text('bekliyor', style: TextStyle(color: Colors.white38, fontSize: 12)),
               ),
             for (var i = 1; i <= (oda['bot'] as int); i++)
               ListTile(
@@ -145,15 +151,48 @@ class _LobiEkraniState extends State<LobiEkrani> {
             if (oda['sahip'] == oda['oyuncular'][oda['sen'] as int]['ad']) ...[
               const Text('Bot sayısı', style: TextStyle(color: Colors.white70)),
               _botSecici(onChanged: (b) => _net?.gonder({'t': 'bot', 'bot': b})),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 14)),
-                onPressed: ((oda['oyuncular'] as List).length + (oda['bot'] as int)) >= 2 ? () => _net?.gonder({'t': 'basla'}) : null,
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Oyunu başlat', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              const Text('Tur süresi', style: TextStyle(color: Colors.white70)),
+              SegmentedButton<int>(
+                style: SegmentedButton.styleFrom(foregroundColor: Colors.white, selectedForegroundColor: Colors.black, selectedBackgroundColor: Colors.amber, side: const BorderSide(color: Colors.white54)),
+                segments: const [
+                  ButtonSegment(value: 0, label: Text('Yok')),
+                  ButtonSegment(value: 30, label: Text('30 sn')),
+                  ButtonSegment(value: 60, label: Text('60 sn')),
+                  ButtonSegment(value: 90, label: Text('90 sn')),
+                ],
+                selected: {_sure},
+                onSelectionChanged: (s) {
+                  setState(() => _sure = s.first);
+                  _net?.gonder({'t': 'sure', 'sure': s.first});
+                },
               ),
-            ] else
+              const SizedBox(height: 16),
+              Builder(builder: (_) {
+                final oy = oda['oyuncular'] as List;
+                final hepsiHazir = oy.every((o) => (o['hazir'] as bool? ?? false) || !(o['bagli'] as bool));
+                final yeter = oy.length + (oda['bot'] as int) >= 2;
+                return FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 14)),
+                  onPressed: yeter && hepsiHazir ? () => _net?.gonder({'t': 'basla'}) : null,
+                  icon: const Icon(Icons.play_arrow),
+                  label: Text(hepsiHazir ? 'Oyunu başlat' : 'Herkesin hazır olması bekleniyor', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                );
+              }),
+            ] else ...[
+              Text('Tur süresi: ${_sure == 0 ? 'yok' : '$_sure sn'}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: _hazir ? Colors.greenAccent : Colors.amber, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 14)),
+                onPressed: () {
+                  setState(() => _hazir = !_hazir);
+                  _net?.gonder({'t': 'hazir', 'hazir': _hazir});
+                },
+                icon: Icon(_hazir ? Icons.check : Icons.hourglass_top),
+                label: Text(_hazir ? 'Hazırım ✓ (vazgeç)' : 'Hazırım', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              ),
               const Center(child: Padding(padding: EdgeInsets.all(12), child: Text('Oda sahibinin başlatması bekleniyor…', style: TextStyle(color: Colors.white70)))),
+            ],
           ],
           if (_hata != null)
             Padding(

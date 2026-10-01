@@ -10,7 +10,9 @@ import '../model/cards.dart';
 import '../model/game.dart';
 import 'card_widget.dart';
 import 'package:monodeal_cekirdek/aktarim.dart';
+import 'dart:io';
 import '../ayarlar.dart';
+import '../basarimlar.dart';
 import '../net/istemci.dart';
 import 'dialogs.dart';
 import 'table_3d.dart';
@@ -79,6 +81,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   StreamSubscription? _netAbone;
   Future<void> _olayKuyrugu = Future.value();
   bool _turBitiyor = false;
+  DateTime? _sureBitis;
+  Timer? _sayacTik;
+  int _benimTurum = 0;
+  int _sonSira = -1;
   late final HumanDecider _insan = HumanDecider(() => context);
 
   @override
@@ -122,6 +128,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
     // tek kişilik oyun: her değişiklikte kaydet (uygulama kapanınca devam edilebilir)
     game.addListener(_kaydet);
+    game.addListener(_turTakip);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (widget.kayit != null) {
         kayitYukle(game, widget.kayit!);
@@ -132,6 +139,49 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       setState(() => _hazir = true);
       _botKontrol();
     });
+  }
+
+  /// Sıra değişimini izler: kendi tur sayım (hızlı galibiyet rozeti) ve yerel tur sayacı.
+  void _turTakip() {
+    if (game.current == _sonSira) return;
+    _sonSira = game.current;
+    if (game.aktif == ben) {
+      _benimTurum++;
+      if (!_online && Ayarlar.o.turSuresi > 0 && game.kazanan == null) {
+        _sureBitis = DateTime.now().add(Duration(seconds: Ayarlar.o.turSuresi));
+        _sayacKur();
+      }
+    } else if (!_online) {
+      _sureBitis = null;
+      _sayacKur();
+    }
+  }
+
+  void _sayacKur() {
+    _sayacTik?.cancel();
+    if (_sureBitis == null) {
+      if (mounted) setState(() {});
+      return;
+    }
+    _sayacTik = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      final kalan = _sureBitis!.difference(DateTime.now()).inSeconds;
+      setState(() {});
+      if (kalan <= 0) {
+        _sayacTik?.cancel();
+        if (!_online && _sirada) {
+          _mesaj('Süre doldu, tur geçti.');
+          _turBitir();
+        }
+      }
+    });
+  }
+
+  int? get _kalanSn {
+    final b = _sureBitis;
+    if (b == null) return null;
+    final k = b.difference(DateTime.now()).inSeconds;
+    return k < 0 ? 0 : k;
   }
 
   void _kaydet() {
@@ -145,6 +195,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     switch (m['t']) {
       case 'durum':
         durumYukle(game, Map<String, dynamic>.from(m['d'] as Map));
+        final sb = (m['d'] as Map)['sureBitis'];
+        _sureBitis = sb is int ? DateTime.fromMillisecondsSinceEpoch(sb) : null;
+        _sayacKur();
         if (!_hazir) setState(() => _hazir = true);
         _bitisKontrol();
         // hamle hakkı bitince tur kendiliğinden biter (yerel moddaki _sonra ile aynı)
@@ -221,6 +274,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _netAbone?.cancel();
     widget.net?.kapat();
     game.removeListener(_kaydet);
+    game.removeListener(_turTakip);
+    _sayacTik?.cancel();
     for (final u in _ucanlar) {
       u.ctl.dispose();
     }
@@ -287,6 +342,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   /// Konuşmayı başlatır ve hemen döner (hamle beklemez); sözler sırayla kuyruklanır.
   Future<void> _konus(Player p, String soz) async {
     if (!mounted) return;
+    if (p == ben) {
+      if (soz.endsWith('seti artık benim.')) Ayarlar.o.sayacHaciz++;
+      if (soz == 'Reddediyorum!') Ayarlar.o.sayacReddet++;
+    }
     final no = ++_sozSayac;
     _sonSoz = _sonSoz.then((_) => _seslendir(p, soz, no));
   }
@@ -533,6 +592,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     a.oynanan++;
     if (k == ben) a.kazanilan++;
     a.kaydet();
+    _basarimKontrol(k == ben);
+    if (!_online) _sonucGonder(k == ben);
     if (!_online) a.kayitYaz(null);
     final oran = a.oynanan == 0 ? 0 : (a.kazanilan * 100 / a.oynanan).round();
     final sira = [...game.players]..sort((x, y) => y.varlikToplam.compareTo(x.varlikToplam));
@@ -567,6 +628,47 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         ),
       );
     });
+  }
+
+  void _basarimKontrol(bool kazandim) {
+    final a = Ayarlar.o;
+    final d = BasarimDurumu.o;
+    d.seriGuncelle(kazandim);
+    final idler = <String>[];
+    if (a.oynanan >= 10) idler.add('on_oyun');
+    if (a.sayacHaciz > 0) idler.add('haciz');
+    if (a.sayacReddet > 0) idler.add('reddet');
+    if (kazandim) {
+      idler.add('ilk_galibiyet');
+      if (a.kazanilan >= 3) idler.add('uc_galibiyet');
+      if (a.kazanilan >= 10) idler.add('on_galibiyet');
+      if (!_online && botlar.length >= 4) idler.add('dort_bot');
+      if (!_online && a.botZorluk == 2) idler.add('zor_bot');
+      if (ben.bankaToplam >= 20) idler.add('zengin');
+      if (_online) idler.add('online');
+      if (d.seri >= 3) idler.add('seri');
+      if (_benimTurum > 0 && _benimTurum < 10) idler.add('hizli');
+    }
+    final yeni = d.ac(idler);
+    if (yeni.isNotEmpty && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        duration: const Duration(seconds: 4),
+        backgroundColor: const Color(0xFF1E7B3A),
+        content: Text('🏅 Yeni başarım: ${yeni.map((b) => '${b.ikon} ${b.ad}').join(', ')}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+      ));
+    }
+  }
+
+  /// Botla oynanan oyunun sonucunu liderlik tablosuna gönderir (sunucu erişilebilirse).
+  Future<void> _sonucGonder(bool kazandim) async {
+    try {
+      final adres = '${Ayarlar.o.sunucu.replaceFirst('wss://', 'https://').replaceFirst('ws://', 'http://')}/sonuc';
+      final c = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+      final r = await c.postUrl(Uri.parse(adres));
+      r.headers.contentType = ContentType.json;
+      r.write(jsonEncode({'ad': Ayarlar.o.ad, 'kazandi': kazandim}));
+      await (await r.close()).drain<void>();
+    } catch (_) {}
   }
 
   bool get _sirada => _hazir && game.aktif == ben && game.kazanan == null && !_botOynuyor && _ucanlar.isEmpty && _masaUcanlar.isEmpty;
@@ -990,6 +1092,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             Text(son, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 11)),
           ]),
         ),
+        if (_kalanSn != null && game.kazanan == null)
+          Container(
+            margin: const EdgeInsets.only(right: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(color: (_kalanSn! <= 10 ? Colors.redAccent : Colors.black54), borderRadius: BorderRadius.circular(10)),
+            child: Text('⏱ $_kalanSn', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
+          ),
         Text('Tam set ${ben.tamSetSayisi}/3', style: const TextStyle(color: Colors.white70, fontSize: 11)),
         IconButton(
           tooltip: 'Turu bitir',

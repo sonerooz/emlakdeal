@@ -11,6 +11,44 @@ import 'package:monodeal_cekirdek/cards.dart';
 import 'package:monodeal_cekirdek/game.dart';
 
 final odalar = <String, Oda>{};
+final liderlik = Liderlik('liderlik.json');
+
+/// Basit liderlik tablosu: ad → {oyun, galibiyet, online}. Dosyaya yazılır.
+class Liderlik {
+  Liderlik(this.yol) {
+    try {
+      final f = File(yol);
+      if (f.existsSync()) tablo = Map<String, dynamic>.from(jsonDecode(f.readAsStringSync()) as Map);
+    } catch (_) {}
+  }
+  final String yol;
+  Map<String, dynamic> tablo = {};
+
+  void kaydet(String ad, bool kazandi, {bool online = false}) {
+    final a = ad.trim();
+    if (a.isEmpty || a.length > 24) return;
+    final e = Map<String, dynamic>.from((tablo[a] as Map?) ?? {'oyun': 0, 'galibiyet': 0, 'online': 0});
+    e['oyun'] = (e['oyun'] as int) + 1;
+    if (kazandi) e['galibiyet'] = (e['galibiyet'] as int) + 1;
+    if (online) e['online'] = ((e['online'] as int?) ?? 0) + 1;
+    e['son'] = DateTime.now().toIso8601String();
+    tablo[a] = e;
+    try {
+      File(yol).writeAsStringSync(jsonEncode(tablo));
+    } catch (e) {
+      log('liderlik yazılamadı: $e');
+    }
+  }
+
+  List<Map<String, dynamic>> sirali() {
+    final l = [for (final e in tablo.entries) {'ad': e.key, ...Map<String, dynamic>.from(e.value as Map)}];
+    l.sort((a, b) {
+      final c = (b['galibiyet'] as int).compareTo(a['galibiyet'] as int);
+      return c != 0 ? c : (a['oyun'] as int).compareTo(b['oyun'] as int);
+    });
+    return l.take(50).toList();
+  }
+}
 final rng = Random();
 
 void log(String s) => stdout.writeln('${DateTime.now().toIso8601String().substring(11, 19)} $s');
@@ -38,6 +76,7 @@ class Koltuk {
   /// Bağlantı koptu ve 30 sn içinde dönmedi: yerine bot oynar (dönerse geri alır).
   bool botlasti = false;
   Timer? kopmaSayaci;
+  bool hazir = false;
 }
 
 class Oda {
@@ -46,7 +85,12 @@ class Oda {
   Koltuk sahip;
   final List<Koltuk> koltuklar = [];
   int botSayisi = 1;
+  int turSuresi = 60; // sn; 0 = kapalı
   Game? game;
+  bool mesgul = false;
+  int _sonSira = -1;
+  DateTime? sureBitis;
+  Timer? turSayaci;
   final bot = BotDecider();
   bool botOynuyor = false;
   DateTime sozBitis = DateTime.now();
@@ -65,8 +109,9 @@ class Oda {
         't': 'oda',
         'kod': kod,
         'bot': botSayisi,
-        'oyuncular': [for (final k in koltuklar) {'ad': k.ad, 'bagli': k.bag != null}],
+        'oyuncular': [for (final k in koltuklar) {'ad': k.ad, 'bagli': k.bag != null, 'hazir': k == sahip || k.hazir}],
         'sahip': sahip.ad,
+        'sure': turSuresi,
       };
 
   void lobiYayinla() {
@@ -78,11 +123,46 @@ class Oda {
   void durumYayinla() {
     final g = game;
     if (g == null) return;
+    _turDegistiMi(g);
     for (final k in koltuklar) {
       final b = k.bag;
       if (b == null || k.player == null) continue;
-      b.gonder({'t': 'durum', 'd': durumJson(g, icin: k.player)});
+      b.gonder({'t': 'durum', 'd': durumJson(g, icin: k.player)..['sureBitis'] = sureBitis?.millisecondsSinceEpoch});
     }
+  }
+
+  /// Sıra bir insana geçtiyse tur sayacını başlat; süre dolunca tur otomatik biter.
+  void _turDegistiMi(Game g) {
+    if (g.current == _sonSira) return;
+    _sonSira = g.current;
+    turSayaci?.cancel();
+    sureBitis = null;
+    if (turSuresi <= 0 || g.kazanan != null || aktifBotMu(g)) return;
+    sureBitis = DateTime.now().add(Duration(seconds: turSuresi));
+    final sira = g.current;
+    turSayaci = Timer(Duration(seconds: turSuresi), () => _sureDoldu(sira));
+  }
+
+  Future<void> _sureDoldu(int sira) async {
+    final g = game;
+    if (g == null || g.kazanan != null || g.current != sira || aktifBotMu(g)) return;
+    if (mesgul) {
+      // hamle/karar bekleniyor: biraz sonra tekrar bak
+      turSayaci = Timer(const Duration(seconds: 3), () => _sureDoldu(sira));
+      return;
+    }
+    mesgul = true;
+    try {
+      herkese({'t': 'bilgi', 'm': '${g.aktif.name} süresi doldu, tur geçti.'});
+      await g.turBitir();
+    } catch (e) {
+      log('süre dolunca tur bitirilemedi: $e');
+    } finally {
+      mesgul = false;
+    }
+    durumYayinla();
+    bitisKontrol();
+    if (g.kazanan == null && aktifBotMu(g)) unawaited(botKontrol());
   }
 
   void herkese(Map<String, dynamic> m) {
@@ -94,6 +174,8 @@ class Oda {
   Future<void> basla() async {
     final toplam = koltuklar.length + botSayisi;
     if (toplam < 2 || toplam > 5) throw 'Oyuncu sayısı 2-5 olmalı (şu an $toplam)';
+    final hazirDegil = koltuklar.where((k) => k != sahip && k.bag != null && !k.hazir).map((k) => k.ad).toList();
+    if (hazirDegil.isNotEmpty) throw 'Hazır değil: ${hazirDegil.join(', ')}';
     final players = <Player>[];
     for (final k in koltuklar) {
       k.karar = UzakKarar(this, k);
@@ -136,6 +218,7 @@ class Oda {
     final g = game;
     if (g == null || botOynuyor) return;
     botOynuyor = true;
+    mesgul = true;
     try {
       while (g.kazanan == null && aktifBotMu(g)) {
         await bot.turOyna(g, g.aktif);
@@ -144,16 +227,23 @@ class Oda {
       log('bot hatası: $e\n$st');
     } finally {
       botOynuyor = false;
+      mesgul = false;
     }
     durumYayinla();
     bitisKontrol();
   }
 
+  bool _bittiBildirildi = false;
   void bitisKontrol() {
     final g = game;
-    if (g?.kazanan != null) {
+    if (g?.kazanan != null && !_bittiBildirildi) {
+      _bittiBildirildi = true;
+      turSayaci?.cancel();
       herkese({'t': 'bitti', 'kazanan': g!.players.indexOf(g.kazanan!)});
       log('oda $kod bitti: ${g.kazanan!.name}');
+      for (final k in koltuklar) {
+        if (k.player != null) liderlik.kaydet(k.ad, k.player == g.kazanan, online: true);
+      }
     }
   }
 
@@ -170,6 +260,11 @@ class Oda {
     Player? oyuncu(String alan) => m[alan] == null ? null : g.players[m[alan] as int];
     PColor? renk(String alan) => m[alan] == null ? null : PColor.values[m[alan] as int];
     final tip = m['tip'] as String;
+    if (mesgul) {
+      k.bag?.gonder({'t': 'hata', 'm': 'Önceki hamle sürüyor, bekle.'});
+      return;
+    }
+    mesgul = true;
     try {
       switch (tip) {
         case 'mulk':
@@ -202,6 +297,8 @@ class Oda {
     } catch (e, st) {
       log('hamle hatası ($tip): $e\n$st');
       k.bag?.gonder({'t': 'hata', 'm': 'Hamle yapılamadı: $e'});
+    } finally {
+      mesgul = false;
     }
     durumYayinla();
     bitisKontrol();
@@ -225,7 +322,7 @@ class UzakKarar extends Decider {
     _bekleyen[id] = c;
     b.gonder({'t': 'sor', 'id': id, 'tur': tur, ...veri});
     try {
-      return await c.future.timeout(const Duration(seconds: 90));
+      return await c.future.timeout(Duration(seconds: oda.turSuresi > 0 ? oda.turSuresi.clamp(20, 120) : 120));
     } catch (_) {
       return null;
     } finally {
@@ -346,6 +443,17 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
       if (oda == null || oda.sahip != b.koltuk || oda.basladi) return;
       oda.botSayisi = ((m['bot'] as int?) ?? 1).clamp(0, 3);
       oda.lobiYayinla();
+    case 'sure':
+      final oda = b.oda;
+      if (oda == null || oda.sahip != b.koltuk || oda.basladi) return;
+      oda.turSuresi = ((m['sure'] as int?) ?? 60).clamp(0, 180);
+      oda.lobiYayinla();
+    case 'hazir':
+      final oda = b.oda;
+      final k = b.koltuk;
+      if (oda == null || k == null || oda.basladi) return;
+      k.hazir = (m['hazir'] as bool?) ?? true;
+      oda.lobiYayinla();
     case 'basla':
       final oda = b.oda;
       if (oda == null || oda.sahip != b.koltuk || oda.basladi) return;
@@ -419,6 +527,26 @@ Future<void> main(List<String> args) async {
       req.response
         ..write('ok odalar=${odalar.length}')
         ..close();
+      continue;
+    }
+    if (req.uri.path == '/liderlik') {
+      req.response
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode(liderlik.sirali()))
+        ..close();
+      continue;
+    }
+    if (req.uri.path == '/sonuc' && req.method == 'POST') {
+      try {
+        final j = jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>;
+        liderlik.kaydet(j['ad'] as String, j['kazandi'] == true);
+        req.response.write('ok');
+      } catch (e) {
+        req.response
+          ..statusCode = 400
+          ..write('$e');
+      }
+      await req.response.close();
       continue;
     }
     if (!WebSocketTransformer.isUpgradeRequest(req)) {

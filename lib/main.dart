@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'ui/game_screen.dart';
 import 'ayarlar.dart';
+import 'basarimlar.dart';
 import 'ui/ayarlar_ekrani.dart';
+import 'ui/basarimlar_ekrani.dart';
 import 'ui/lobi.dart';
 import 'ui/ogretici.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Ayarlar.o.yukle();
+  await BasarimDurumu.o.yukle();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const MonoDealApp());
 }
@@ -128,6 +131,12 @@ class _MenuScreenState extends State<MenuScreen> {
                   onPressed: () => showDialog(context: context, builder: (_) => const _KurallarDlg()),
                   icon: const Icon(Icons.menu_book),
                   label: const Text('Kurallar'),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
+                  onPressed: () => _ac(const BasarimlarEkrani()),
+                  icon: const Icon(Icons.emoji_events),
+                  label: const Text('Başarımlar'),
                 ),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),

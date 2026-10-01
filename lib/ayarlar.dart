@@ -12,6 +12,8 @@ class Ayarlar {
   bool muzik = false;
   String sunucu = 'ws://192.168.1.21:8765';
   int botZorluk = 1; // 0 kolay, 1 normal, 2 zor
+  int turSuresi = 0; // sn, tek kişilik oyunda; 0 = kapalı
+  int sayacHaciz = 0, sayacReddet = 0;
   int oynanan = 0;
   int kazanilan = 0;
   bool ogreticiGoruldu = false;
@@ -24,6 +26,9 @@ class Ayarlar {
     muzik = p.getBool('muzik') ?? muzik;
     sunucu = p.getString('sunucu') ?? sunucu;
     botZorluk = p.getInt('botZorluk') ?? botZorluk;
+    turSuresi = p.getInt('turSuresi') ?? 0;
+    sayacHaciz = p.getInt('sayacHaciz') ?? 0;
+    sayacReddet = p.getInt('sayacReddet') ?? 0;
     oynanan = p.getInt('oynanan') ?? 0;
     kazanilan = p.getInt('kazanilan') ?? 0;
     ogreticiGoruldu = p.getBool('ogretici') ?? false;
@@ -37,6 +42,9 @@ class Ayarlar {
     await p.setBool('muzik', muzik);
     await p.setString('sunucu', sunucu);
     await p.setInt('botZorluk', botZorluk);
+    await p.setInt('turSuresi', turSuresi);
+    await p.setInt('sayacHaciz', sayacHaciz);
+    await p.setInt('sayacReddet', sayacReddet);
     await p.setInt('oynanan', oynanan);
     await p.setInt('kazanilan', kazanilan);
     await p.setBool('ogretici', ogreticiGoruldu);
