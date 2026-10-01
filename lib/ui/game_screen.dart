@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
@@ -7,12 +8,19 @@ import '../ai/bot.dart';
 import '../model/cards.dart';
 import '../model/game.dart';
 import 'card_widget.dart';
+import 'package:monodeal_cekirdek/aktarim.dart';
+import '../net/istemci.dart';
 import 'dialogs.dart';
 import 'table_3d.dart';
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, this.botSayisi = 1});
-  final int botSayisi; // 1..4
+  const GameScreen({super.key, this.botSayisi = 1, this.net, this.benIdx = 0, this.adlar = const [], this.botlar = const []});
+  final int botSayisi; // 1..4 (yerel oyun)
+  /// Online mod: sunucu bağlantısı; oyun motoru sunucuda, burası ayna + arayüz.
+  final Istemci? net;
+  final int benIdx;
+  final List<String> adlar;
+  final List<bool> botlar;
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
@@ -29,6 +37,7 @@ class _Ucan {
 
 class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   late final Game game;
+  late final _GameDinleyici _dinleyici;
   late final Player ben;
   late final List<Player> botlar;
   final BotDecider _botAi = BotDecider();
@@ -58,22 +67,46 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final Map<Player, Map<String, String>> _sesler = {};
   final Map<Player, double> _perde = {};
 
+  bool get _online => widget.net != null;
+  StreamSubscription? _netAbone;
+  Future<void> _olayKuyrugu = Future.value();
+  bool _turBitiyor = false;
+  late final HumanDecider _insan = HumanDecider(() => context);
+
   @override
   void initState() {
     super.initState();
-    ben = Player('Sen', isBot: false, decider: HumanDecider(() => context));
-    final n = widget.botSayisi.clamp(1, 4);
-    botlar = [for (var i = 1; i <= n; i++) Player(n == 1 ? 'Bot' : 'Bot $i', isBot: true, decider: _botAi)];
+    if (_online) {
+      final oy = [
+        for (var i = 0; i < widget.adlar.length; i++)
+          Player(widget.adlar[i], isBot: widget.botlar[i], decider: i == widget.benIdx ? _insan : _botAi),
+      ];
+      ben = oy[widget.benIdx];
+      botlar = [for (final p in oy) if (p != ben) p];
+      game = Game(players: oy);
+    } else {
+      ben = Player('Sen', isBot: false, decider: _insan);
+      final n = widget.botSayisi.clamp(1, 4);
+      botlar = [for (var i = 1; i <= n; i++) Player(n == 1 ? 'Bot' : 'Bot $i', isBot: true, decider: _botAi)];
+      game = Game(players: [ben, ...botlar]);
+    }
     for (final b in botlar) {
       _kBotEl[b] = GlobalKey();
       _kBotSet[b] = GlobalKey();
     }
-    game = Game(players: [ben, ...botlar]);
+    _dinleyici = _GameDinleyici(game);
     game.animator = _animasyon;
     game.sozcu = _konus;
     game.sozBekle = _sozBekle;
     _ttsKur();
     _klipleriYukle();
+    if (_online) {
+      _netAbone = widget.net!.mesajlar.listen(_netMesaj);
+      widget.net!.koptu.listen((_) {
+        if (mounted) _mesaj('Sunucu bağlantısı koptu.');
+      });
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await game.baslat();
       if (!mounted) return;
@@ -82,10 +115,82 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
   }
 
+  // ----------------------------------------------------------- online
+  void _netMesaj(Map<String, dynamic> m) {
+    if (!mounted) return;
+    switch (m['t']) {
+      case 'durum':
+        durumYukle(game, Map<String, dynamic>.from(m['d'] as Map));
+        if (!_hazir) setState(() => _hazir = true);
+        _bitisKontrol();
+        // hamle hakkı bitince tur kendiliğinden biter (yerel moddaki _sonra ile aynı)
+        if (game.kazanan == null && game.aktif == ben && game.playsLeft <= 0 && !_turBitiyor) {
+          _turBitiyor = true;
+          Future.delayed(const Duration(milliseconds: 700), () async {
+            if (mounted && game.aktif == ben && game.playsLeft <= 0) await _turBitir();
+            _turBitiyor = false;
+          });
+        }
+      case 'olay':
+        final e = olayOku(game, Map<String, dynamic>.from(m['o'] as Map));
+        _olayKuyrugu = _olayKuyrugu.then((_) => _animasyon(e));
+      case 'soz':
+        _konus(game.players[m['kim'] as int], m['soz'] as String);
+      case 'sor':
+        _soruyaCevap(m);
+      case 'hata':
+        _mesaj(m['m'] as String? ?? 'Hata');
+      case 'bitti':
+        _bitisKontrol();
+    }
+  }
+
+  Future<void> _soruyaCevap(Map<String, dynamic> m) async {
+    final id = m['id'] as int;
+    dynamic deger;
+    try {
+      // açık diyalog/animasyon varsa önce o bitsin
+      await _olayKuyrugu;
+      switch (m['tur']) {
+        case 'justSayNo':
+          deger = await _insan.justSayNo(game, ben, m['aciklama'] as String);
+        case 'ode':
+          final l = await _insan.ode(game, ben, m['tutar'] as int, game.players[m['alacakli'] as int]);
+          deger = [for (final c in l) c.id];
+        case 'odemeKarari':
+          final k = await _insan.odemeKarari(game, ben, m['tutar'] as int, game.players[m['alacakli'] as int], m['aciklama'] as String,
+              reddedebilir: m['reddedebilir'] as bool);
+          deger = {'reddet': k.reddet, 'kartlar': [for (final c in k.kartlar) c.id]};
+        case 'jokerRengi':
+          final sec = [for (final i in (m['secenekler'] as List)) PColor.values[i as int]];
+          final kart = kartBul(game, m['kart'] as int) ?? ben.hand.first;
+          deger = (await _insan.jokerRengi(game, ben, kart, sec)).index;
+        case 'atilacaklar':
+          final l = await _insan.atilacaklar(game, ben, m['adet'] as int);
+          deger = [for (final c in l) c.id];
+      }
+    } catch (_) {
+      deger = null;
+    }
+    widget.net?.gonder({'t': 'karar', 'id': id, 'deger': deger});
+  }
+
+  /// Hamle: online ise sunucuya gönderir (sonuç durum mesajıyla gelir), değilse yerel motoru çağırır.
+  Future<bool> _yap(String tip, Map<String, dynamic> veri, Future<bool> Function() yerel) async {
+    if (_online) {
+      widget.net!.gonder({'t': 'hamle', 'tip': tip, ...veri});
+      return true;
+    }
+    return yerel();
+  }
+
   @override
   void dispose() {
     _tts.stop();
     _klip.dispose();
+    _dinleyici.dispose();
+    _netAbone?.cancel();
+    widget.net?.kapat();
     for (final u in _ucanlar) {
       u.ctl.dispose();
     }
@@ -280,7 +385,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   // ----------------------------------------------------------- akış
   /// Sıradaki(ler) botsa sırayla oynatır; sıra insana gelince durur.
   Future<void> _botKontrol() async {
-    if (_botOynuyor) return;
+    if (_botOynuyor || _online) return;
     _botOynuyor = true;
     if (mounted) setState(() {});
     try {
@@ -311,6 +416,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             FilledButton(
               onPressed: () {
                 Navigator.of(ctx).pop();
+                if (_online) {
+                  Navigator.of(context).popUntil((r) => r.isFirst);
+                  return;
+                }
                 Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => GameScreen(botSayisi: widget.botSayisi)));
               },
               child: const Text('Yeni oyun'),
@@ -384,7 +493,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (!_sirada) return _mesaj('Sıra sende değil.');
     if (game.playsLeft <= 0) return _mesaj('Hamle hakkın bitti.');
     if (c.isProperty || c.isMoney) {
-      final ok = c.isMoney ? await game.bankayaKoy(ben, c) : await game.mulkOyna(ben, c);
+      final ok = c.isMoney
+          ? await _yap('banka', {'kart': c.id}, () => game.bankayaKoy(ben, c))
+          : await _yap('mulk', {'kart': c.id}, () => game.mulkOyna(ben, c));
       if (!ok && mounted) _mesaj('Bu hamle yapılamadı.');
       return _sonra();
     }
@@ -395,11 +506,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       final a = c.action!;
       switch (a) {
         case ActionType.passGo:
-          secenekler.add(_Secenek('▶ 2 Kart Çek', () => game.passGo(ben, c)));
+          secenekler.add(_Secenek('▶ 2 Kart Çek', () => _yap('passGo', {'kart': c.id}, () => game.passGo(ben, c))));
         case ActionType.tahsilat:
           secenekler.add(_Secenek('💵 Tahsilat: 5M al', () => _tahsilat(c), aktif: aktif));
         case ActionType.birthday:
-          secenekler.add(_Secenek('🎂 Doğum Günüm: herkesten 2M', () => game.dogumGunu(ben, c), aktif: aktif));
+          secenekler.add(_Secenek('🎂 Doğum Günüm: herkesten 2M', () => _yap('dogumGunu', {'kart': c.id}, () => game.dogumGunu(ben, c)), aktif: aktif));
         case ActionType.slyDeal:
           secenekler.add(_Secenek('🕵️ Tapu Devri: rakipten tapu al', () => _slyDeal(c), aktif: aktif));
         case ActionType.forcedDeal:
@@ -418,7 +529,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           }, aktif: false));
       }
     }
-    secenekler.add(_Secenek('🏦 Bankaya koy (${c.paraDegeri}M para olur)', () => game.bankayaKoy(ben, c)));
+    secenekler.add(_Secenek('🏦 Bankaya koy (${c.paraDegeri}M para olur)', () => _yap('banka', {'kart': c.id}, () => game.bankayaKoy(ben, c))));
     final sec = await showModalBottomSheet<_Secenek>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -502,7 +613,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
     final r = await _rakipSec('💵 Kimden 5M?', adaylar);
     if (r == null) return false;
-    return game.tahsilat(ben, c, r);
+    return _yap('tahsilat', {'kart': c.id, 'hedef': game.players.indexOf(r)}, () => game.tahsilat(ben, c, r));
   }
 
   Future<bool> _kira(GameCard c) async {
@@ -521,7 +632,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         cift = ciftKart.first;
       }
     }
-    return game.kiraOyna(ben, c, renk, cift: cift);
+    return _yap('kira', {'kart': c.id, 'renk': renk.index, if (cift != null) 'cift': cift.id}, () => game.kiraOyna(ben, c, renk, cift: cift));
   }
 
   Future<bool> _ciftKira(GameCard cift) async {
@@ -537,7 +648,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final c = await _kartSec('Hangi kira kartıyla?', kiralar);
     if (c == null || !mounted) return false;
     final renk = _kiraRenkleri(c).reduce((x, y) => ben.kira(y) > ben.kira(x) ? y : x);
-    return game.kiraOyna(ben, c, renk, cift: cift);
+    return _yap('kira', {'kart': c.id, 'renk': renk.index, 'cift': cift.id}, () => game.kiraOyna(ben, c, renk, cift: cift));
   }
 
   Future<bool> _slyDeal(GameCard c) async {
@@ -548,7 +659,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
     final h = await _rakipKartiSec('🕵️ Hangi tapuyu alıyorsun?', gruplar);
     if (h == null) return false;
-    return game.slyDeal(ben, c, h);
+    return _yap('slyDeal', {'kart': c.id, 'hedefKart': h.id}, () => game.slyDeal(ben, c, h));
   }
 
   Future<bool> _forcedDeal(GameCard c) async {
@@ -562,7 +673,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (o == null || !mounted) return false;
     final b = await _kartSec('🔁 Karşılığında hangisini veriyorsun?', benimkiler);
     if (b == null) return false;
-    return game.forcedDeal(ben, c, b, o);
+    return _yap('forcedDeal', {'kart': c.id, 'benim': b.id, 'onun': o.id}, () => game.forcedDeal(ben, c, b, o));
   }
 
   Future<bool> _dealBreaker(GameCard c) async {
@@ -575,7 +686,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (r == null || !mounted) return false;
     final s = await _renkSec('💥 Hangi tam seti?', r.tamSetler);
     if (s == null) return false;
-    return game.dealBreaker(ben, c, r, s);
+    return _yap('dealBreaker', {'kart': c.id, 'hedef': game.players.indexOf(r), 'set': s.index}, () => game.dealBreaker(ben, c, r, s));
   }
 
   Future<bool> _bina(GameCard c) async {
@@ -586,12 +697,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
     final s = await _renkSec('🏗️ Hangi sete?', setler);
     if (s == null) return false;
-    return game.binaKoy(ben, c, s);
+    return _yap('bina', {'kart': c.id, 'set': s.index}, () => game.binaKoy(ben, c, s));
   }
 
   Future<void> _turBitir() async {
     if (!_hazir || game.aktif != ben || game.kazanan != null || _botOynuyor) return;
     setState(() => _acikDeste = null);
+    if (_online) {
+      widget.net!.gonder({'t': 'hamle', 'tip': 'turBitir'});
+      return;
+    }
     await game.turBitir();
     if (mounted) setState(() {});
     _botKontrol();
@@ -599,7 +714,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   Future<void> _jokerTasi(GameCard c) async {
     if (!_sirada) return;
-    await game.jokerRengiDegistir(ben, c);
+    await _yap('joker', {'kart': c.id}, () => game.jokerRengiDegistir(ben, c));
     await _sonra();
   }
 
@@ -607,13 +722,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: game,
+      listenable: _dinleyici,
       builder: (context, _) {
         final durum = !_hazir
             ? 'Kartlar dağıtılıyor…'
             : game.kazanan != null
                 ? 'Oyun bitti'
-                : _botOynuyor
+                : (_botOynuyor || (_online && game.aktif != ben))
                     ? '${game.aktif.name} oynuyor…'
                     : game.aktif == ben
                         ? 'Sıra sende · ${game.playsLeft} hamle'
@@ -876,4 +991,17 @@ class _Secenek {
   final String baslik;
   final Future<bool> Function() calistir;
   final bool aktif;
+}
+
+/// Motor Flutter'dan bağımsız; UI için ChangeNotifier köprüsü.
+class _GameDinleyici extends ChangeNotifier {
+  _GameDinleyici(this.game) {
+    game.addListener(notifyListeners);
+  }
+  final Game game;
+  @override
+  void dispose() {
+    game.removeListener(notifyListeners);
+    super.dispose();
+  }
 }

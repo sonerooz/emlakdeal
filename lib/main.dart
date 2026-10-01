@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'ui/game_screen.dart';
+import 'ui/lobi.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -73,6 +74,13 @@ class _MenuScreenState extends State<MenuScreen> {
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => GameScreen(botSayisi: _bot))),
                 icon: const Icon(Icons.play_arrow),
                 label: const Text('Oyna'),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.tonalIcon(
+                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14), textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LobiEkrani())),
+                icon: const Icon(Icons.wifi),
+                label: const Text('Online oyna (arkadaşlarla)'),
               ),
               const SizedBox(height: 16),
               OutlinedButton.icon(

@@ -36,6 +36,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_tts: ^4.2.5
   audioplayers: ^6.1.0
+  monodeal_cekirdek:
+    path: cekirdek
 
 dev_dependencies:
   flutter_test:

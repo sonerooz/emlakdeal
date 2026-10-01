@@ -1,0 +1,6 @@
+name: monodeal_cekirdek
+description: Monopoly Deal oyun motoru (saf Dart; uygulama ve sunucu ortak kullanır).
+version: 1.0.0
+publish_to: none
+environment:
+  sdk: ^3.5.0
