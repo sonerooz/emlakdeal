@@ -2,8 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:monodeal/model/cards.dart';
-import 'package:monodeal/ui/card_widget.dart';
+import 'package:emlakdeal/model/cards.dart';
+import 'package:emlakdeal/ui/card_widget.dart';
 
 void main() {
   testWidgets('kart gorunumleri', (tester) async {

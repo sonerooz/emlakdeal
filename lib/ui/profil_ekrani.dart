@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:monodeal_cekirdek/seviye.dart';
+import 'package:emlakdeal_cekirdek/seviye.dart';
 import '../hesap.dart';
 
 /// Profil: nick, avatar, level/XP/altın, istatistikler, e-posta ile hesabı güvenceye alma.

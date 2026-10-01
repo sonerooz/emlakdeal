@@ -1,2 +1,2 @@
-export 'package:monodeal_cekirdek/cards.dart';
+export 'package:emlakdeal_cekirdek/cards.dart';
 export '../ui/renkler.dart';

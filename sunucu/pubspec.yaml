@@ -1,4 +1,4 @@
-name: monodeal_sunucu
+name: emlakdeal_sunucu
 description: Emlak Deal online sunucusu (WebSocket, oyun motoru hakem).
 version: 1.0.0
 publish_to: none
@@ -7,5 +7,5 @@ environment:
 dependencies:
   sqlite3: ^3.7.0
   crypto: ^3.0.6
-  monodeal_cekirdek:
+  emlakdeal_cekirdek:
     path: ../cekirdek

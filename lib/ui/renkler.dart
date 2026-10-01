@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:monodeal_cekirdek/cards.dart';
+import 'package:emlakdeal_cekirdek/cards.dart';
 
 /// Mülk setlerinin ekran renkleri (motor Flutter'dan bağımsız olduğu için burada).
 extension PColorRenk on PColor {

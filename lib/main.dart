@@ -17,11 +17,11 @@ Future<void> main() async {
   await Hesap.o.yukle();
   Hesap.o.baglan(); // arka planda; sunucu yoksa sessiz
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  runApp(const MonoDealApp());
+  runApp(const EmlakDealApp());
 }
 
-class MonoDealApp extends StatelessWidget {
-  const MonoDealApp({super.key});
+class EmlakDealApp extends StatelessWidget {
+  const EmlakDealApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'Emlak Deal',
@@ -159,6 +159,12 @@ class _MenuScreenState extends State<MenuScreen> {
                   onPressed: () => showDialog(context: context, builder: (_) => const _KurallarDlg()),
                   icon: const Icon(Icons.menu_book),
                   label: const Text('Kurallar'),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.amber, side: const BorderSide(color: Colors.amber)),
+                  onPressed: () => _ac(const ProfilEkrani()),
+                  icon: const Icon(Icons.account_circle),
+                  label: const Text('Profilim'),
                 ),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),

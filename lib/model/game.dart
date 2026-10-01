@@ -1,1 +1,1 @@
-export 'package:monodeal_cekirdek/game.dart';
+export 'package:emlakdeal_cekirdek/game.dart';

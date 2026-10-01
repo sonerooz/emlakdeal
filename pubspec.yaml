@@ -1,4 +1,4 @@
-name: monodeal
+name: emlakdeal
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -37,7 +37,7 @@ dependencies:
   flutter_tts: ^4.2.5
   audioplayers: ^6.1.0
   shared_preferences: ^2.5.5
-  monodeal_cekirdek:
+  emlakdeal_cekirdek:
     path: cekirdek
 
 dev_dependencies:

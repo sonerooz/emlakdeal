@@ -5,11 +5,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:monodeal_cekirdek/aktarim.dart';
-import 'package:monodeal_cekirdek/bot.dart';
-import 'package:monodeal_cekirdek/cards.dart';
-import 'package:monodeal_cekirdek/game.dart';
-import 'package:monodeal_cekirdek/seviye.dart';
+import 'package:emlakdeal_cekirdek/aktarim.dart';
+import 'package:emlakdeal_cekirdek/bot.dart';
+import 'package:emlakdeal_cekirdek/cards.dart';
+import 'package:emlakdeal_cekirdek/game.dart';
+import 'package:emlakdeal_cekirdek/seviye.dart';
 
 import 'db.dart';
 

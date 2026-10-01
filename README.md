@@ -1,4 +1,4 @@
-# monodeal
+# emlakdeal
 
 A new Flutter project.
 

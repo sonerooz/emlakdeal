@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
-import 'package:monodeal_cekirdek/seviye.dart';
+import 'package:emlakdeal_cekirdek/seviye.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 class Db {

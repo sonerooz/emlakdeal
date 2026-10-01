@@ -1,6 +1,6 @@
 /// Level/XP/altın kuralları (uygulama ve sunucu ortak).
 ///
-/// Level L'den L+1'e geçiş eşiği: L*100 + fib(L)*10, fib(1)=1, fib(2)=2, fib(3)=3, fib(4)=5…
+/// Level L'den L+1'e geçiş eşiği: L*100 + fib(min(L,12))*10, fib(1)=1, fib(2)=2, fib(3)=3, fib(4)=5…
 /// (1→2: 110, 2→3: 220, 3→4: 330, 4→5: 450). En yüksek level 80.
 const maxLevel = 80;
 
@@ -16,7 +16,8 @@ int fib(int n) {
 }
 
 /// [level]'den bir sonrakine geçmek için gereken XP.
-int levelEsigi(int level) => level >= maxLevel ? 0 : level * 100 + fib(level) * 10;
+/// fib terimi 12'de sabitlenir (üstel patlamayı önler): 80. seviyeye toplam ≈ 450 bin XP.
+int levelEsigi(int level) => level >= maxLevel ? 0 : level * 100 + fib(level < 12 ? level : 12) * 10;
 
 /// Toplam XP'den level ve o leveldeki ilerleme.
 ({int level, int levelXp, int esik}) levelHesapla(int toplamXp) {

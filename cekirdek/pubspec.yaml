@@ -1,4 +1,4 @@
-name: monodeal_cekirdek
+name: emlakdeal_cekirdek
 description: Emlak Deal oyun motoru (saf Dart; uygulama ve sunucu ortak kullanır).
 version: 1.0.0
 publish_to: none
