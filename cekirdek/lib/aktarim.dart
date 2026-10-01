@@ -112,3 +112,65 @@ GameCard? kartBul(Game g, int id) {
   }
   return null;
 }
+
+// ----------------------------------------------------------- tam kayıt (tek kişilik oyun)
+
+/// Oyunun TAMAMI (deste, atık, tüm eller): uygulama kapanınca devam etmek için.
+Map<String, dynamic> kayitJson(Game g) => {
+      'oyuncular': [
+        for (final p in g.players)
+          {
+            'ad': p.name,
+            'bot': p.isBot,
+            'el': _kartlar(p.hand),
+            'banka': _kartlar(p.bank),
+            'tapular': {for (final e in p.props.entries) '${e.key.index}': _kartlar(e.value)},
+            'binalar': {for (final e in p.binalar.entries) '${e.key.index}': _kartlar(e.value)},
+          }
+      ],
+      'deste': _kartlar(g.deck),
+      'atik': _kartlar(g.discard),
+      'sira': g.current,
+      'hamle': g.playsLeft,
+      'log': g.log.length > 30 ? g.log.sublist(g.log.length - 30) : g.log,
+      'basladi': g.turBasladi,
+      'paraId': g.paraId,
+    };
+
+/// [kayitJson] çıktısını, oyuncuları aynı sırada kurulmuş [g]'ye yükler.
+void kayitYukle(Game g, Map<String, dynamic> j) {
+  final oy = j['oyuncular'] as List;
+  for (var i = 0; i < g.players.length && i < oy.length; i++) {
+    final p = g.players[i];
+    final o = Map<String, dynamic>.from(oy[i] as Map);
+    p.hand
+      ..clear()
+      ..addAll(_oku(o['el']));
+    p.bank
+      ..clear()
+      ..addAll(_oku(o['banka']));
+    p.props.clear();
+    for (final e in (o['tapular'] as Map).entries) {
+      p.props[PColor.values[int.parse(e.key as String)]] = _oku(e.value);
+    }
+    p.binalar.clear();
+    for (final e in (o['binalar'] as Map).entries) {
+      p.binalar[PColor.values[int.parse(e.key as String)]] = _oku(e.value);
+    }
+  }
+  g.deck
+    ..clear()
+    ..addAll(_oku(j['deste']));
+  g.discard
+    ..clear()
+    ..addAll(_oku(j['atik']));
+  g.current = j['sira'] as int;
+  g.playsLeft = j['hamle'] as int;
+  g.kazanan = null;
+  g.log
+    ..clear()
+    ..addAll((j['log'] as List).cast<String>());
+  g.turBasladi = j['basladi'] as bool;
+  g.paraId = (j['paraId'] as int?) ?? 1000;
+  g.notifyListeners();
+}

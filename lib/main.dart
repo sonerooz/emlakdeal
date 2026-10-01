@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'ui/game_screen.dart';
+import 'ayarlar.dart';
+import 'ui/ayarlar_ekrani.dart';
 import 'ui/lobi.dart';
+import 'ui/ogretici.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Ayarlar.o.yukle();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const MonoDealApp());
 }
@@ -28,6 +32,19 @@ class MenuScreen extends StatefulWidget {
 
 class _MenuScreenState extends State<MenuScreen> {
   int _bot = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!Ayarlar.o.ogreticiGoruldu) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OgreticiEkrani())));
+    }
+  }
+
+  Future<void> _ac(Widget w) async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => w));
+    if (mounted) setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,30 +82,60 @@ class _MenuScreenState extends State<MenuScreen> {
               const SizedBox(height: 6),
               Text('${_bot + 1} oyuncu · sen + $_bot bot', style: const TextStyle(color: Colors.white54, fontSize: 12)),
               const SizedBox(height: 28),
+              if (Ayarlar.o.kayit != null) ...[
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                      backgroundColor: Colors.amber,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                      textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  onPressed: () => _ac(GameScreen(kayit: Ayarlar.o.kayit)),
+                  icon: const Icon(Icons.play_circle),
+                  label: const Text('Kaldığın yerden devam et'),
+                ),
+                const SizedBox(height: 10),
+              ],
               FilledButton.icon(
                 style: FilledButton.styleFrom(
-                    backgroundColor: Colors.amber,
-                    foregroundColor: Colors.black,
+                    backgroundColor: Ayarlar.o.kayit != null ? Colors.white24 : Colors.amber,
+                    foregroundColor: Ayarlar.o.kayit != null ? Colors.white : Colors.black,
                     padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                     textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => GameScreen(botSayisi: _bot))),
+                onPressed: () {
+                  Ayarlar.o.kayitYaz(null);
+                  _ac(GameScreen(botSayisi: _bot));
+                },
                 icon: const Icon(Icons.play_arrow),
-                label: const Text('Oyna'),
+                label: Text(Ayarlar.o.kayit != null ? 'Yeni oyun' : 'Oyna'),
               ),
               const SizedBox(height: 12),
               FilledButton.tonalIcon(
                 style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14), textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LobiEkrani())),
+                onPressed: () => _ac(const LobiEkrani()),
                 icon: const Icon(Icons.wifi),
                 label: const Text('Online oyna (arkadaşlarla)'),
               ),
               const SizedBox(height: 16),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
-                onPressed: () => showDialog(context: context, builder: (_) => const _KurallarDlg()),
-                icon: const Icon(Icons.menu_book),
-                label: const Text('Kurallar'),
-              ),
+              Wrap(spacing: 8, alignment: WrapAlignment.center, children: [
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
+                  onPressed: () => _ac(const OgreticiEkrani()),
+                  icon: const Icon(Icons.school),
+                  label: const Text('Nasıl oynanır'),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
+                  onPressed: () => showDialog(context: context, builder: (_) => const _KurallarDlg()),
+                  icon: const Icon(Icons.menu_book),
+                  label: const Text('Kurallar'),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
+                  onPressed: () => _ac(const AyarlarEkrani()),
+                  icon: const Icon(Icons.settings),
+                  label: const Text('Ayarlar'),
+                ),
+              ]),
             ]),
           ),
         ),

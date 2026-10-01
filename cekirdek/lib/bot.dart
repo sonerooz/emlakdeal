@@ -5,8 +5,17 @@ import 'game.dart';
 /// Basit ama mantıklı bot: set tamamlamaya, kira/çalma ile rakipleri zayıflatmaya öncelik verir.
 /// Birden fazla rakipte hedefi (en zengin / en tehlikeli) kendisi seçer.
 class BotDecider extends Decider {
+  /// 0 kolay (saldırıları sık atlar, Reddet'i nadiren kullanır), 1 normal, 2 zor (hep en iyi hamle).
+  BotDecider({this.zorluk = 1, Random? rng}) : _rng = rng ?? Random();
+  final int zorluk;
+  final Random _rng;
+
+  /// Kolay botun bir fırsatı kaçırma olasılığı.
+  bool _kacir() => zorluk == 0 && _rng.nextDouble() < 0.5;
+
   @override
   Future<bool> justSayNo(Game g, Player me, String aciklama) async {
+    if (zorluk == 0 && _rng.nextDouble() < 0.6) return false;
     if (aciklama.contains('Haciz') || aciklama.contains('Tapu Devri') || aciklama.contains('Değiş Tokuş')) {
       return true;
     }
@@ -103,7 +112,7 @@ class BotDecider extends Decider {
     final rakipler = g.rakipler(me);
     // 1) Haciz: en değerli tam sete sahip rakip
     final db = _kart(me, ActionType.dealBreaker);
-    if (db != null) {
+    if (db != null && !_kacir()) {
       Player? hedef;
       PColor? set;
       var best = -1;
@@ -140,21 +149,26 @@ class BotDecider extends Decider {
       }
     }
     final rakipVarlik = rakipler.fold(0, (s, r) => s + r.varlikToplam);
-    if (enIyiKira != null && enIyi > 0 && rakipVarlik > 0) {
+    if (enIyiKira != null && enIyi > 0 && rakipVarlik > 0 && !_kacir()) {
       final cift = _kart(me, ActionType.doubleRent);
-      final ciftKullan = cift != null && g.playsLeft >= 2 && enIyi >= 2;
+      final ciftKullan = cift != null && g.playsLeft >= 2 && enIyi >= 2 && zorluk > 0;
       return g.kiraOyna(me, enIyiKira, enIyiRenk!, cift: ciftKullan ? cift : null);
+    }
+    // 3b) Zor bot: eli zenginleştirmek için 2 Kart Çek'i öne alır
+    if (zorluk == 2) {
+      final pg2 = _kart(me, ActionType.passGo);
+      if (pg2 != null && g.playsLeft >= 2) return g.passGo(me, pg2);
     }
     // 4) Tapu Devri: tüm rakiplerin alınabilir tapuları arasından en işe yarayan
     final sd = _kart(me, ActionType.slyDeal);
     final calinabilir = [for (final r in rakipler) ...g.calinabilir(r)];
-    if (sd != null && calinabilir.isNotEmpty) {
+    if (sd != null && calinabilir.isNotEmpty && !_kacir()) {
       calinabilir.sort((a, b) => _calmaSkor(me, b).compareTo(_calmaSkor(me, a)));
       return g.slyDeal(me, sd, calinabilir.first);
     }
     // 5) Değiş Tokuş (sadece set tamamlıyorsa)
     final fd = _kart(me, ActionType.forcedDeal);
-    if (fd != null && calinabilir.isNotEmpty) {
+    if (fd != null && calinabilir.isNotEmpty && !_kacir()) {
       final benimkiler = g.calinabilir(me);
       for (final o in calinabilir) {
         final renk = o.etkinRenk!;
@@ -169,7 +183,7 @@ class BotDecider extends Decider {
     }
     // 6-7) Borç tahsildarı (en zengine) / doğum günü
     final dc = _kart(me, ActionType.tahsilat);
-    if (dc != null) {
+    if (dc != null && !_kacir()) {
       final hedef = _enZengin(g, me);
       if (hedef.varlikToplam >= 2) return g.tahsilat(me, dc, hedef);
     }

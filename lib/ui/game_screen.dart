@@ -9,12 +9,15 @@ import '../model/cards.dart';
 import '../model/game.dart';
 import 'card_widget.dart';
 import 'package:monodeal_cekirdek/aktarim.dart';
+import '../ayarlar.dart';
 import '../net/istemci.dart';
 import 'dialogs.dart';
 import 'table_3d.dart';
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, this.botSayisi = 1, this.net, this.benIdx = 0, this.adlar = const [], this.botlar = const []});
+  const GameScreen({super.key, this.botSayisi = 1, this.net, this.benIdx = 0, this.adlar = const [], this.botlar = const [], this.kayit});
+  /// Kaydedilmiş tek kişilik oyun (devam et).
+  final Map<String, dynamic>? kayit;
   final int botSayisi; // 1..4 (yerel oyun)
   /// Online mod: sunucu bağlantısı; oyun motoru sunucuda, burası ayna + arayüz.
   final Istemci? net;
@@ -40,7 +43,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   late final _GameDinleyici _dinleyici;
   late final Player ben;
   late final List<Player> botlar;
-  final BotDecider _botAi = BotDecider();
+  late final BotDecider _botAi = BotDecider(zorluk: Ayarlar.o.botZorluk);
   bool _botOynuyor = false;
   bool _bittiGosterildi = false;
   bool _hazir = false;
@@ -62,7 +65,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final FlutterTts _tts = FlutterTts();
   final AudioPlayer _klip = AudioPlayer();
   Map<String, dynamic> _klipler = const {};
-  bool _sesli = true;
+  bool _sesli = Ayarlar.o.sesli;
   bool _ttsHazir = false;
   final Map<Player, Map<String, String>> _sesler = {};
   final Map<Player, double> _perde = {};
@@ -84,8 +87,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ben = oy[widget.benIdx];
       botlar = [for (final p in oy) if (p != ben) p];
       game = Game(players: oy);
+    } else if (widget.kayit != null) {
+      final oy = widget.kayit!['oyuncular'] as List;
+      ben = Player((oy[0] as Map)['ad'] as String, isBot: false, decider: _insan);
+      botlar = [for (var i = 1; i < oy.length; i++) Player((oy[i] as Map)['ad'] as String, isBot: true, decider: _botAi)];
+      game = Game(players: [ben, ...botlar]);
     } else {
-      ben = Player('Sen', isBot: false, decider: _insan);
+      ben = Player(Ayarlar.o.ad, isBot: false, decider: _insan);
       final n = widget.botSayisi.clamp(1, 4);
       botlar = [for (var i = 1; i <= n; i++) Player(n == 1 ? 'Bot' : 'Bot $i', isBot: true, decider: _botAi)];
       game = Game(players: [ben, ...botlar]);
@@ -107,12 +115,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       });
       return;
     }
+    // tek kişilik oyun: her değişiklikte kaydet (uygulama kapanınca devam edilebilir)
+    game.addListener(_kaydet);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await game.baslat();
+      if (widget.kayit != null) {
+        kayitYukle(game, widget.kayit!);
+      } else {
+        await game.baslat();
+      }
       if (!mounted) return;
       setState(() => _hazir = true);
       _botKontrol();
     });
+  }
+
+  void _kaydet() {
+    if (_online || game.kazanan != null) return;
+    Ayarlar.o.kayitYaz(kayitJson(game));
   }
 
   // ----------------------------------------------------------- online
@@ -193,6 +212,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _dinleyici.dispose();
     _netAbone?.cancel();
     widget.net?.kapat();
+    game.removeListener(_kaydet);
     for (final u in _ucanlar) {
       u.ctl.dispose();
     }
@@ -406,13 +426,27 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (game.kazanan == null || _bittiGosterildi) return;
     _bittiGosterildi = true;
     final k = game.kazanan!;
+    final a = Ayarlar.o;
+    a.oynanan++;
+    if (k == ben) a.kazanilan++;
+    a.kaydet();
+    if (!_online) a.kayitYaz(null);
+    final oran = a.oynanan == 0 ? 0 : (a.kazanilan * 100 / a.oynanan).round();
+    final sira = [...game.players]..sort((x, y) => y.varlikToplam.compareTo(x.varlikToplam));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
           title: Text(k == ben ? '🏆 Kazandın!' : '😔 ${k.name} kazandı'),
-          content: Text('${k.name} 3 tam set topladı: ${k.tamSetler.map((c) => c.ad).join(', ')}.'),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${k.name} 3 tam set topladı: ${k.tamSetler.map((c) => c.ad).join(', ')}.'),
+            const SizedBox(height: 12),
+            for (final p in sira)
+              Text('${p == k ? '🏆 ' : ''}${p.name}: ${p.tamSetSayisi} tam set · ${p.varlikToplam}M varlık', style: TextStyle(fontWeight: p == ben ? FontWeight.w700 : FontWeight.w400)),
+            const SizedBox(height: 12),
+            Text('Toplam: ${a.oynanan} oyun, ${a.kazanilan} galibiyet (%$oran)', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+          ]),
           actions: [
             TextButton(onPressed: () => Navigator.of(ctx).popUntil((r) => r.isFirst), child: const Text('Menüye dön')),
             FilledButton(
@@ -424,7 +458,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 }
                 Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => GameScreen(botSayisi: widget.botSayisi)));
               },
-              child: const Text('Yeni oyun'),
+              child: Text(_online ? 'Lobiye dön' : 'Revanş'),
             ),
           ],
         ),
@@ -746,6 +780,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 tooltip: _sesli ? 'Sesi kapat' : 'Sesi aç',
                 onPressed: () => setState(() {
                   _sesli = !_sesli;
+                  Ayarlar.o.sesli = _sesli;
+                  Ayarlar.o.kaydet();
                   if (!_sesli) {
                     _tts.stop();
                     _klip.stop();

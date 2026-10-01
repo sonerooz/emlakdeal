@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../ayarlar.dart';
 import '../net/istemci.dart';
 import 'game_screen.dart';
 
@@ -13,8 +14,8 @@ class LobiEkrani extends StatefulWidget {
 }
 
 class _LobiEkraniState extends State<LobiEkrani> {
-  final _ad = TextEditingController(text: 'Soner');
-  final _sunucu = TextEditingController(text: varsayilanSunucu);
+  final _ad = TextEditingController(text: Ayarlar.o.ad);
+  final _sunucu = TextEditingController(text: Ayarlar.o.sunucu);
   final _kod = TextEditingController();
   Istemci? _net;
   StreamSubscription? _abone;
@@ -35,6 +36,9 @@ class _LobiEkraniState extends State<LobiEkrani> {
       _mesgul = true;
       _hata = null;
     });
+    Ayarlar.o.ad = _ad.text.trim().isEmpty ? 'Oyuncu' : _ad.text.trim();
+    Ayarlar.o.sunucu = _sunucu.text.trim();
+    Ayarlar.o.kaydet();
     try {
       final net = Istemci(_sunucu.text.trim());
       await net.baglan();

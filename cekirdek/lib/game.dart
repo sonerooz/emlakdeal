@@ -162,7 +162,7 @@ class Game extends Bildirici {
 
   final List<Player> players;
   final Random rng;
-  int _paraId = 1000; // bankaya dönüşen para kartları için benzersiz id
+  int paraId = 1000; // bankaya dönüşen para kartları için benzersiz id
   final List<GameCard> deck = [];
   final List<GameCard> discard = [];
   final List<String> log = [];
@@ -307,7 +307,7 @@ class Game extends Bildirici {
       _log('${p.name} ${c.ad} kartını bankaya koydu.');
     } else {
       // Aksiyon/kira kartı bankaya girince düz para kartına dönüşür (geri alınamaz).
-      p.bank.add(GameCard.para(_paraId++, c.paraDegeri));
+      p.bank.add(GameCard.para(paraId++, c.paraDegeri));
       _log('${p.name} ${c.ad} kartını ${c.paraDegeri}M para olarak bankaya koydu.');
     }
     _harca();
