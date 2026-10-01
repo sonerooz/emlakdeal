@@ -20,7 +20,7 @@ class MonoDealApp extends StatelessWidget {
   const MonoDealApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'Monopoly Deal',
+        title: 'Emlak Deal',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(colorSchemeSeed: const Color(0xFF1B5E3A), useMaterial3: true),
         home: const MenuScreen(),
@@ -59,7 +59,7 @@ class _MenuScreenState extends State<MenuScreen> {
         child: SafeArea(
           child: Center(
             child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Text('MONOPOLY', style: TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 4)),
+              const Text('EMLAK', style: TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900, letterSpacing: 4)),
               const Text('DEAL', style: TextStyle(color: Colors.amber, fontSize: 56, fontWeight: FontWeight.w900, letterSpacing: 8, height: 0.9)),
               const SizedBox(height: 12),
               const Text('Kart oyunu', style: TextStyle(color: Colors.white70, fontSize: 16)),

@@ -4,7 +4,7 @@ import '../ayarlar.dart';
 import '../net/istemci.dart';
 import 'game_screen.dart';
 
-const varsayilanSunucu = 'ws://192.168.1.21:8765';
+const varsayilanSunucu = 'wss://emlakdeal.tailb92005.ts.net';
 
 /// Online oyun: sunucuya bağlan, oda kur / odaya katıl, oyuncuları gör, başlat.
 class LobiEkrani extends StatefulWidget {
@@ -42,8 +42,16 @@ class _LobiEkraniState extends State<LobiEkrani> {
     Ayarlar.o.sunucu = _sunucu.text.trim();
     Ayarlar.o.kaydet();
     try {
-      final net = Istemci(_sunucu.text.trim());
-      await net.baglan();
+      Istemci net;
+      try {
+        net = Istemci(_sunucu.text.trim());
+        await net.baglan();
+      } catch (e) {
+        // ev içindeyken dış adres (hairpin NAT) çalışmayabilir: yerel adresi dene
+        if (_sunucu.text.trim() == Ayarlar.sunucuYerel) rethrow;
+        net = Istemci(Ayarlar.sunucuYerel);
+        await net.baglan();
+      }
       _net = net;
       _abone = net.mesajlar.listen(_mesaj);
       net.koptu.listen((_) {

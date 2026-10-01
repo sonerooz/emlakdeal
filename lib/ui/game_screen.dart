@@ -979,7 +979,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           appBar: AppBar(
             backgroundColor: const Color(0xFF0F3D25),
             foregroundColor: Colors.white,
-            title: Text('Monopoly Deal · ${game.players.length} oyuncu', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+            title: Text('Emlak Deal · ${game.players.length} oyuncu', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
             actions: [
               IconButton(tooltip: 'Sohbet / emoji', onPressed: _sohbetAc, icon: const Icon(Icons.chat_bubble_outline)),
               IconButton(

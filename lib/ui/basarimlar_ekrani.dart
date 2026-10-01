@@ -28,8 +28,12 @@ class _BasarimlarEkraniState extends State<BasarimlarEkrani> with SingleTickerPr
   Future<void> _liderlikYukle() async {
     try {
       final c = HttpClient()..connectionTimeout = const Duration(seconds: 6);
-      final r = await c.getUrl(Uri.parse(liderlikAdresi(Ayarlar.o.sunucu)));
-      final y = await r.close();
+      HttpClientResponse y;
+      try {
+        y = await (await c.getUrl(Uri.parse(liderlikAdresi(Ayarlar.o.sunucu)))).close();
+      } catch (_) {
+        y = await (await c.getUrl(Uri.parse(liderlikAdresi(Ayarlar.sunucuYerel)))).close();
+      }
       final j = jsonDecode(await y.transform(utf8.decoder).join()) as List;
       if (mounted) setState(() => _lider = [for (final e in j) Map<String, dynamic>.from(e as Map)]);
     } catch (e) {

@@ -10,7 +10,8 @@ class Ayarlar {
   String ad = 'Sen';
   bool sesli = true;
   bool muzik = false;
-  String sunucu = 'ws://192.168.1.21:8765';
+  String sunucu = 'wss://emlakdeal.tailb92005.ts.net';
+  static const sunucuYerel = 'ws://192.168.1.21:8765';
   int botZorluk = 1; // 0 kolay, 1 normal, 2 zor
   int turSuresi = 0; // sn, tek kişilik oyunda; 0 = kapalı
   int sayacHaciz = 0, sayacReddet = 0;
@@ -25,6 +26,7 @@ class Ayarlar {
     sesli = p.getBool('sesli') ?? sesli;
     muzik = p.getBool('muzik') ?? muzik;
     sunucu = p.getString('sunucu') ?? sunucu;
+    if (sunucu == sunucuYerel) sunucu = 'wss://emlakdeal.tailb92005.ts.net'; // eski kurulumlar yeni adrese geçsin
     botZorluk = p.getInt('botZorluk') ?? botZorluk;
     turSuresi = p.getInt('turSuresi') ?? 0;
     sayacHaciz = p.getInt('sayacHaciz') ?? 0;

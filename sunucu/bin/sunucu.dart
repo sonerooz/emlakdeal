@@ -518,10 +518,33 @@ void kopti(Baglanti b) {
   }
 }
 
+/// Sertifika varsa (Let's Encrypt) TLS portunu da açar: wss://emlakdeal.duckdns.org:8766
+const sertifikaDizini = '/etc/letsencrypt/live/emlakdeal.duckdns.org';
+
 Future<void> main(List<String> args) async {
   final port = args.isNotEmpty ? int.parse(args[0]) : 8765;
+  final tlsPort = args.length > 1 ? int.parse(args[1]) : 8766;
   final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
-  log('Monopoly Deal sunucusu dinliyor: ws://0.0.0.0:$port');
+  log('Emlak Deal sunucusu dinliyor: ws://0.0.0.0:$port');
+  final zincir = File('$sertifikaDizini/fullchain.pem'), anahtar = File('$sertifikaDizini/privkey.pem');
+  if (zincir.existsSync() && anahtar.existsSync()) {
+    try {
+      final ctx = SecurityContext()
+        ..useCertificateChain(zincir.path)
+        ..usePrivateKey(anahtar.path);
+      final tls = await HttpServer.bindSecure(InternetAddress.anyIPv4, tlsPort, ctx);
+      log('TLS dinliyor: wss://0.0.0.0:$tlsPort');
+      unawaited(_dinle(tls));
+    } catch (e) {
+      log('TLS açılamadı: $e');
+    }
+  } else {
+    log('sertifika yok ($sertifikaDizini), yalnız düz ws');
+  }
+  await _dinle(server);
+}
+
+Future<void> _dinle(HttpServer server) async {
   await for (final req in server) {
     if (req.uri.path == '/saglik') {
       req.response
