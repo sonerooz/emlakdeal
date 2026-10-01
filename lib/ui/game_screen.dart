@@ -353,9 +353,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           Wrap(spacing: 6, runSpacing: 6, children: [
             for (final sz in sohbetSozleri)
               ActionChip(
-                backgroundColor: Colors.white10,
-                side: const BorderSide(color: Colors.white24),
-                label: Text(sz, style: const TextStyle(color: Colors.white)),
+                backgroundColor: const Color(0xFFF3E3BF),
+                surfaceTintColor: Colors.transparent,
+                side: const BorderSide(color: Color(0xFFC9962B)),
+                label: Text(sz, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w700)),
                 onPressed: () {
                   Navigator.pop(ctx);
                   _sohbetGonder(sz);
