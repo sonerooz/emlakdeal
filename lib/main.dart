@@ -103,7 +103,7 @@ class _KurallarDlg extends StatelessWidget {
             '• Bankaya konan hamle/kira kartı para kartına dönüşür, geri alınamaz.\n'
             '• Kira: elindeki kira kartıyla, o renkte tapun varsa HERKESTEN kira al. Çift Kira ile 2 katı (2 hamle).\n'
             '• Ödeme banka + tapulardan yapılır, elden yapılmaz. Yetmiyorsa her şeyini verirsin.\n'
-            '• Tapu Devri: tamamlanmamış setten tapu al. Değiş Tokuş: takas. Haciz: TAM seti al. Borç Tahsildarı: seçtiğin birinden 5M.\n'
+            '• Tapu Devri: tamamlanmamış setten tapu al. Değiş Tokuş: takas. Haciz: TAM seti al. Tahsilat: seçtiğin birinden 5M.\n'
             '• Reddet: sana oynanan hamleyi iptal eder (karşı taraf da Reddet ile karşılık verebilir).\n'
             '• Ev (+3M) ve Otel (+4M) sadece tam setlere (Siyah / Açık Yeşil hariç).\n'
             '• Joker tapular istediğin renkte sayılır; kendi turunda destede jokere dokunup rengini değiştirebilirsin.\n'

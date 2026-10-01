@@ -125,6 +125,23 @@ class Game extends ChangeNotifier {
   /// Arayüz atar: olayı canlandırır, bitince döner.
   Future<void> Function(GameEvent e)? animator;
 
+  /// Arayüz atar: oyuncu konuşur (balon + ses), bitince döner.
+  Future<void> Function(Player p, String soz)? sozcu;
+
+  /// Arayüz atar: süren seslendirme bitene kadar bekler (sıra geçmeden önce).
+  Future<void> Function()? sozBekle;
+
+  /// Süren konuşma bitmeden yeni hamleye geçilmez.
+  Future<void> _sozBitsin() async {
+    final b = sozBekle;
+    if (b != null) await b();
+  }
+
+  Future<void> _soyle(Player p, String soz) async {
+    final f = sozcu;
+    if (f != null) await f(p, soz);
+  }
+
   Future<void> _anim(GameEvent e) async {
     final a = animator;
     if (a != null) await a(e);
@@ -207,6 +224,7 @@ class Game extends ChangeNotifier {
       }
       _log('${p.name} ${at.length} kart attı.');
     }
+    await _sozBitsin();
     current = (current + 1) % players.length;
     await turBaslat();
   }
@@ -224,6 +242,7 @@ class Game extends ChangeNotifier {
       if (p.tamSetSayisi >= 3) {
         kazanan = p;
         _log('🏆 ${p.name} 3 tam setle kazandı!');
+        _soyle(p, 'Üç tam set! Kazandım!');
       }
     }
   }
@@ -231,6 +250,7 @@ class Game extends ChangeNotifier {
   // ----------------------------------------------------------- basit oynayışlar
   Future<bool> mulkOyna(Player p, GameCard c) async {
     if (!_oynayabilir() || !c.isProperty || !p.hand.contains(c)) return false;
+    await _sozBitsin();
     PColor renk;
     if (c.kind == CardKind.property) {
       renk = c.color!;
@@ -238,6 +258,7 @@ class Game extends ChangeNotifier {
       final sec = c.isMultiWild ? PColor.values : c.colors;
       renk = await p.decider.jokerRengi(this, p, c, sec);
     }
+    await _soyle(p, c.isWild ? 'Jokeri ${renk.ad} setine koyuyorum.' : '${c.ad} tapusu masaya.');
     await _anim(GameEvent(EvTip.mulk, c, kim: p, renk: renk));
     p.hand.remove(c);
     p.mulkEkle(c, renk);
@@ -249,6 +270,7 @@ class Game extends ChangeNotifier {
   /// Oynanmış joker mülkün rengini değiştir (ücretsiz, kendi turunda).
   Future<bool> jokerRengiDegistir(Player p, GameCard c) async {
     if (!c.isWild || kazanan != null) return false;
+    await _sozBitsin();
     final eski = c.wildColor;
     final sec = c.isMultiWild ? PColor.values : c.colors;
     final yeni = await p.decider.jokerRengi(this, p, c, sec);
@@ -263,6 +285,8 @@ class Game extends ChangeNotifier {
 
   Future<bool> bankayaKoy(Player p, GameCard c) async {
     if (!_oynayabilir() || c.isProperty || !p.hand.contains(c)) return false;
+    await _sozBitsin();
+    await _soyle(p, c.isMoney ? '${c.paraDegeri}M bankaya.' : 'Hamle kartını ${c.paraDegeri}M olarak bankaya koyuyorum.');
     await _anim(GameEvent(EvTip.banka, c, kim: p));
     p.hand.remove(c);
     if (c.isMoney) {
@@ -315,6 +339,7 @@ class Game extends ChangeNotifier {
       final hedefJsn = hedef.hand.where((c) => c.action == ActionType.justSayNo).toList();
       if (hedef.varliklar.isEmpty && hedefJsn.isEmpty) {
         _log('${hedef.name} ödeyecek hiçbir şeyi yok.');
+        await _soyle(hedef, 'Ödeyecek hiçbir şeyim yok.');
         return;
       }
       OdemeKarari karar;
@@ -328,8 +353,11 @@ class Game extends ChangeNotifier {
       if (!karar.reddet) {
         if (karar.kartlar.isEmpty) {
           _log('${hedef.name} ödeyecek hiçbir şeyi yok.');
+          await _soyle(hedef, 'Ödeyecek hiçbir şeyim yok.');
           return;
         }
+        final odenen = karar.kartlar.fold(0, (t, c) => t + c.paraDegeri);
+        await _soyle(hedef, odenen >= tutar ? 'Buyur, ${tutar}M.' : 'Elimde bu kadar var: ${odenen}M.');
         await _tahsilKartlarla(hedef, saldiran, karar.kartlar, sebep);
         return;
       }
@@ -338,6 +366,7 @@ class Game extends ChangeNotifier {
       discard.add(hedefJsn.first);
       _log('${hedef.name} Reddet oynadı — $sebep iptal!');
       notifyListeners();
+      await _soyle(hedef, 'Reddediyorum!');
       final saldiranJsn = saldiran.hand.where((c) => c.action == ActionType.justSayNo).toList();
       if (saldiranJsn.isEmpty || !await saldiran.decider.justSayNo(this, saldiran, 'Reddet (${hedef.name} $sebep ödemeyi reddetti)')) {
         return;
@@ -346,6 +375,7 @@ class Game extends ChangeNotifier {
       discard.add(saldiranJsn.first);
       _log('${saldiran.name} Reddet ile karşılık verdi — talep yeniden geçerli!');
       notifyListeners();
+      await _soyle(saldiran, 'Reddini reddediyorum!');
     }
   }
 
@@ -384,6 +414,7 @@ class Game extends ChangeNotifier {
       iptal = !iptal;
       _log('${savunan.name} Reddet oynadı${iptal ? ' — aksiyon iptal!' : ' — reddi reddetti!'}');
       notifyListeners();
+      await _soyle(savunan, iptal ? 'Reddediyorum!' : 'Reddini reddediyorum!');
       final t = savunan;
       savunan = saldiranP;
       saldiranP = t;
@@ -400,6 +431,8 @@ class Game extends ChangeNotifier {
 
   Future<bool> passGo(Player p, GameCard c) async {
     if (!_oynayabilir() || c.action != ActionType.passGo) return false;
+    await _sozBitsin();
+    await _soyle(p, 'İki kart çekiyorum.');
     await _aksiyonuAt(p, c);
     await _cekEle(p, 2);
     _log('${p.name} 2 Kart Çek oynadı: 2 kart çekti.');
@@ -407,17 +440,21 @@ class Game extends ChangeNotifier {
     return true;
   }
 
-  Future<bool> borcTahsildari(Player p, GameCard c, Player r) async {
-    if (!_oynayabilir() || c.action != ActionType.debtCollector || r == p) return false;
+  Future<bool> tahsilat(Player p, GameCard c, Player r) async {
+    if (!_oynayabilir() || c.action != ActionType.tahsilat || r == p) return false;
+    await _sozBitsin();
+    await _soyle(p, 'Senden 5M tahsil ediyorum.');
     await _aksiyonuAt(p, c);
-    _log('${p.name} Borç Tahsildarı: ${r.name} 5M ödemeli.');
-    await _talep(p, r, 5, 'Borç Tahsildarı (5M)', 'Borç Tahsildarı');
+    _log('${p.name} Tahsilat: ${r.name} 5M ödemeli.');
+    await _talep(p, r, 5, 'Tahsilat (5M)', 'Tahsilat');
     _harca();
     return true;
   }
 
   Future<bool> dogumGunu(Player p, GameCard c) async {
     if (!_oynayabilir() || c.action != ActionType.birthday) return false;
+    await _sozBitsin();
+    await _soyle(p, 'Bugün doğum günüm! Herkesten 2M istiyorum.');
     await _aksiyonuAt(p, c);
     _log('${p.name} Doğum Günüm: herkes 2M veriyor.');
     for (final r in players.where((x) => x != p)) {
@@ -430,15 +467,15 @@ class Game extends ChangeNotifier {
   /// Kira: [renk] için rakipten kira al. [cift] verilirse Çift Kira kartı da harcanır.
   Future<bool> kiraOyna(Player p, GameCard c, PColor renk, {GameCard? cift}) async {
     if (!_oynayabilir() || !c.isRent) return false;
+    await _sozBitsin();
     if (!c.isWildRent && !c.rentColors.contains(renk)) return false;
     if (p.propsOf(renk).isEmpty) return false;
     if (cift != null && (playsLeft < 2 || cift.action != ActionType.doubleRent)) return false;
-    var tutar = p.kira(renk);
+    var tutar = p.kira(renk) * (cift != null ? 2 : 1);
+    if (cift != null) await _soyle(p, 'Çift kira!');
+    await _soyle(p, '${renk.ad} setinden ${tutar}M kira istiyorum.');
     await _aksiyonuAt(p, c);
-    if (cift != null) {
-      await _aksiyonuAt(p, cift, 'Çift Kira');
-      tutar *= 2;
-    }
+    if (cift != null) await _aksiyonuAt(p, cift, 'Çift Kira');
     _log('${p.name} ${renk.ad} kirası: ${tutar}M${cift != null ? ' (çift)' : ''} — herkes öder.');
     for (final r in rakipler(p)) {
       await _talep(p, r, tutar, '${renk.ad} kirası (${tutar}M)', 'kira');
@@ -455,8 +492,10 @@ class Game extends ChangeNotifier {
 
   Future<bool> slyDeal(Player p, GameCard c, GameCard hedefMulk) async {
     if (!_oynayabilir() || c.action != ActionType.slyDeal) return false;
+    await _sozBitsin();
     final r = sahibi(hedefMulk);
     if (r == null || r == p || !calinabilir(r).contains(hedefMulk)) return false;
+    await _soyle(p, hedefMulk.isWild ? 'Joker tapuyu alıyorum.' : '${hedefMulk.ad} tapusunu alıyorum.');
     await _aksiyonuAt(p, c);
     _log('${p.name} Tapu Devri: ${hedefMulk.ad} çalmak istiyor.');
     if (!await _jsnZinciri(p, r, 'Tapu Devri (${hedefMulk.ad})')) {
@@ -472,8 +511,10 @@ class Game extends ChangeNotifier {
 
   Future<bool> forcedDeal(Player p, GameCard c, GameCard benimki, GameCard onunki) async {
     if (!_oynayabilir() || c.action != ActionType.forcedDeal) return false;
+    await _sozBitsin();
     final r = sahibi(onunki);
     if (r == null || r == p || !calinabilir(r).contains(onunki) || !calinabilir(p).contains(benimki)) return false;
+    await _soyle(p, 'Tapu takası yapıyorum.');
     await _aksiyonuAt(p, c);
     _log('${p.name} Değiş Tokuş: ${benimki.ad} ↔ ${onunki.ad}.');
     if (!await _jsnZinciri(p, r, 'Değiş Tokuş (${onunki.ad})')) {
@@ -492,7 +533,9 @@ class Game extends ChangeNotifier {
 
   Future<bool> dealBreaker(Player p, GameCard c, Player r, PColor set) async {
     if (!_oynayabilir() || c.action != ActionType.dealBreaker || r == p) return false;
+    await _sozBitsin();
     if (!r.setTam(set)) return false;
+    await _soyle(p, '${set.ad} tapu setini haciz ediyorum!');
     await _aksiyonuAt(p, c);
     _log('${p.name} Haciz: ${set.ad} setini istiyor!');
     if (!await _jsnZinciri(p, r, 'Haciz (${set.ad} seti)')) {
@@ -508,6 +551,7 @@ class Game extends ChangeNotifier {
       r.binalar.remove(set);
       if (binalar.isNotEmpty) p.binalar.putIfAbsent(set, () => []).addAll(binalar);
       _log('${p.name} ${set.ad} setini aldı!');
+      await _soyle(p, '${set.ad} seti artık benim.');
     }
     _harca();
     return true;
@@ -516,6 +560,7 @@ class Game extends ChangeNotifier {
   /// Ev/otel: tam bir sete koy.
   Future<bool> binaKoy(Player p, GameCard c, PColor set) async {
     if (!_oynayabilir()) return false;
+    await _sozBitsin();
     if (c.action != ActionType.house && c.action != ActionType.hotel) return false;
     if (!p.setTam(set) || !set.binaOlur) return false;
     final mevcut = p.binalar[set] ?? const <GameCard>[];
@@ -523,6 +568,7 @@ class Game extends ChangeNotifier {
     final otelVar = mevcut.any((b) => b.action == ActionType.hotel);
     if (c.action == ActionType.house && evVar) return false;
     if (c.action == ActionType.hotel && (!evVar || otelVar)) return false;
+    await _soyle(p, '${set.ad} setine ${c.action == ActionType.house ? 'ev' : 'otel'} koyuyorum.');
     await _anim(GameEvent(EvTip.mulk, c, kim: p, renk: set));
     p.hand.remove(c);
     p.binalar.putIfAbsent(set, () => []).add(c);

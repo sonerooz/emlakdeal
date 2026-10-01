@@ -168,10 +168,10 @@ class BotDecider extends Decider {
       }
     }
     // 6-7) Borç tahsildarı (en zengine) / doğum günü
-    final dc = _kart(me, ActionType.debtCollector);
+    final dc = _kart(me, ActionType.tahsilat);
     if (dc != null) {
       final hedef = _enZengin(g, me);
-      if (hedef.varlikToplam >= 2) return g.borcTahsildari(me, dc, hedef);
+      if (hedef.varlikToplam >= 2) return g.tahsilat(me, dc, hedef);
     }
     final bd = _kart(me, ActionType.birthday);
     if (bd != null && rakipVarlik >= 1) return g.dogumGunu(me, bd);

@@ -8,41 +8,41 @@ extension PColorX on PColor {
   String get ad => const {
         PColor.brown: 'Kahverengi',
         PColor.lightBlue: 'Açık Mavi',
-        PColor.pink: 'Pembe',
+        PColor.pink: 'Mor',
         PColor.orange: 'Turuncu',
         PColor.red: 'Kırmızı',
         PColor.yellow: 'Sarı',
         PColor.green: 'Yeşil',
         PColor.darkBlue: 'Lacivert',
         PColor.railroad: 'Siyah',
-        PColor.utility: 'Açık Yeşil',
+        PColor.utility: 'Turkuaz',
       }[this]!;
 
   /// Kart üstünde kullanılan kısa ad (uzun adlar sığmıyor).
   String get kisaAd => const {
         PColor.brown: 'Kahve',
         PColor.lightBlue: 'A. Mavi',
-        PColor.pink: 'Pembe',
+        PColor.pink: 'Mor',
         PColor.orange: 'Turuncu',
         PColor.red: 'Kırmızı',
         PColor.yellow: 'Sarı',
         PColor.green: 'Yeşil',
         PColor.darkBlue: 'Lacivert',
         PColor.railroad: 'Siyah',
-        PColor.utility: 'A. Yeşil',
+        PColor.utility: 'Turkuaz',
       }[this]!;
 
   Color get renk => const {
         PColor.brown: Color(0xFF7B4A2E),
         PColor.lightBlue: Color(0xFF7FC8F8),
-        PColor.pink: Color(0xFFE2489A),
+        PColor.pink: Color(0xFFB03A9E),
         PColor.orange: Color(0xFFF08A24),
         PColor.red: Color(0xFFD9342B),
         PColor.yellow: Color(0xFFF2D53C),
         PColor.green: Color(0xFF1E9E4A),
         PColor.darkBlue: Color(0xFF1F3F9E),
         PColor.railroad: Color(0xFF2B2B2B),
-        PColor.utility: Color(0xFFB5E3B0),
+        PColor.utility: Color(0xFF3FC1C9),
       }[this]!;
 
   /// Seti tamamlamak için gereken mülk sayısı.
@@ -88,7 +88,32 @@ extension PColorX on PColor {
       }[this]!;
 
   bool get binaOlur => this != PColor.railroad && this != PColor.utility;
+
+  /// Türkçe (İstanbul) baskısındaki tapu adları; bilinmeyen setlerde boş (renk adı yazılır).
+  List<String> get sokaklar => const {
+        PColor.brown: ['Dolapdere', 'Kasımpaşa'],
+        PColor.lightBlue: ['Sirkeci', 'Karaköy', 'Sultanahmet'],
+        PColor.pink: ['Taksim', 'Beşiktaş', 'Beyoğlu'],
+        PColor.orange: ['Mecidiyeköy', 'Şişli', 'Harbiye'],
+        PColor.red: ['Bostancı', 'Kadıköy', 'Caddebostan'],
+        PColor.yellow: ['Maçka', 'Nişantaşı', 'Teşvikiye'],
+        PColor.green: ['Bebek', 'Levent', 'Etiler'],
+        PColor.darkBlue: ['Yeniköy', 'Tarabya'],
+        PColor.railroad: ['Kabataş Vapur İskelesi', 'Haydarpaşa Tren İstasyonu', 'Sirkeci Tren İstasyonu', 'Kadıköy Deniz Yolları'],
+        PColor.utility: ['Elektrik İdaresi', 'Sular İdaresi'],
+      }[this]!;
 }
+
+/// Para kartı rengi (Türkçe baskı): 1M gri, 2M turuncu, 3M yeşil, 4M mavi, 5M mor, 10M kırmızı.
+/// Hamle/kira kartlarının değer rozeti de aynı renkle gider.
+Color paraRengi(int deger) => const {
+      1: Color(0xFFB8B8B8),
+      2: Color(0xFFF08A24),
+      3: Color(0xFF2E9E4F),
+      4: Color(0xFF2F6FD1),
+      5: Color(0xFF7B3FB5),
+      10: Color(0xFFD9342B),
+    }[deger] ?? const Color(0xFFDDDDDD);
 
 enum CardKind { money, property, wild, action, rent }
 
@@ -97,7 +122,7 @@ enum ActionType {
   justSayNo,
   slyDeal,
   forcedDeal,
-  debtCollector,
+  tahsilat,
   birthday,
   passGo,
   house,
@@ -111,7 +136,7 @@ extension ActionX on ActionType {
         ActionType.justSayNo: 'Reddet',
         ActionType.slyDeal: 'Tapu Devri',
         ActionType.forcedDeal: 'Değiş Tokuş',
-        ActionType.debtCollector: 'Borç Tahsildarı',
+        ActionType.tahsilat: 'Tahsilat',
         ActionType.birthday: 'Doğum Günüm',
         ActionType.passGo: '2 Kart Çek',
         ActionType.house: 'Ev',
@@ -124,7 +149,7 @@ extension ActionX on ActionType {
         ActionType.justSayNo: 'Sana oynanan bir aksiyonu iptal et.',
         ActionType.slyDeal: 'Rakipten tamamlanmamış setten bir tapu çal.',
         ActionType.forcedDeal: 'Rakiple bir tapu takas et (tam setler hariç).',
-        ActionType.debtCollector: 'Rakipten 5M al.',
+        ActionType.tahsilat: 'Bir rakipten 5M tahsil et.',
         ActionType.birthday: 'Her oyuncudan 2M al.',
         ActionType.passGo: '2 kart çek.',
         ActionType.house: 'Tam bir sete koy: kira +3M.',
@@ -137,7 +162,7 @@ extension ActionX on ActionType {
         ActionType.justSayNo: 4,
         ActionType.slyDeal: 3,
         ActionType.forcedDeal: 3,
-        ActionType.debtCollector: 3,
+        ActionType.tahsilat: 3,
         ActionType.birthday: 2,
         ActionType.passGo: 1,
         ActionType.house: 3,
@@ -156,6 +181,7 @@ class GameCard {
     this.colors = const [],
     this.action,
     this.rentColors = const [],
+    this.sokak,
   });
 
   /// Bankaya konan aksiyon/kira kartı bu düz para kartına dönüşür.
@@ -168,6 +194,7 @@ class GameCard {
   final List<PColor> colors; // wild: seçilebilir renkler (boş = her renk)
   final ActionType? action;
   final List<PColor> rentColors; // rent: geçerli renkler (boş = joker kira)
+  final String? sokak; // property: tapu adı (Türkçe baskı)
 
   /// Oynanmış joker mülkün şu anki rengi (değiştirilebilir).
   PColor? wildColor;
@@ -194,7 +221,7 @@ class GameCard {
       case CardKind.money:
         return '${value}M';
       case CardKind.property:
-        return color!.ad;
+        return sokak ?? color!.ad;
       case CardKind.wild:
         return colors.isEmpty ? 'Joker Tapu' : '${colors[0].ad} / ${colors[1].ad}';
       case CardKind.action:
@@ -209,7 +236,7 @@ class GameCard {
       case CardKind.money:
         return '${value}M';
       case CardKind.property:
-        return color!.ad;
+        return sokak ?? color!.ad;
       case CardKind.wild:
         return colors.isEmpty ? 'Joker' : 'Joker';
       case CardKind.action:
@@ -233,7 +260,10 @@ class GameCard {
     }
     // Mülkler (28)
     for (final c in PColor.values) {
-      ekle((i) => GameCard._(id: i, kind: CardKind.property, color: c), c.setBoyu);
+      for (var k = 0; k < c.setBoyu; k++) {
+        final ad = k < c.sokaklar.length ? c.sokaklar[k] : null;
+        d.add(GameCard._(id: id++, kind: CardKind.property, color: c, sokak: ad));
+      }
     }
     // Joker mülkler (11)
     GameCard w(int i, List<PColor> cs, int v) =>
@@ -254,7 +284,7 @@ class GameCard {
       ActionType.justSayNo: 3,
       ActionType.slyDeal: 3,
       ActionType.forcedDeal: 3,
-      ActionType.debtCollector: 3,
+      ActionType.tahsilat: 3,
       ActionType.birthday: 3,
       ActionType.passGo: 10,
       ActionType.house: 3,
