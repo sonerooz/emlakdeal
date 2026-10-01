@@ -14,6 +14,7 @@ import 'dart:io';
 import '../ayarlar.dart';
 import '../basarimlar.dart';
 import '../hesap.dart';
+import '../izleme.dart';
 import 'package:emlakdeal_cekirdek/seviye.dart';
 import '../net/istemci.dart';
 import 'dialogs.dart';
@@ -72,6 +73,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final FlutterTts _tts = FlutterTts();
   final AudioPlayer _klip = AudioPlayer();
   final AudioPlayer _sohbetKlip = AudioPlayer();
+  final AudioPlayer _muzik = AudioPlayer();
+  final AudioPlayer _efekt = AudioPlayer();
+  final _sohbetYazi = TextEditingController();
   final List<(Player, String)> _sohbetGecmis = [];
   (Player, String)? _sohbetBalon;
   int _sohbetNo = 0;
@@ -139,6 +143,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     game.sozBekle = _sozBekle;
     _ttsKur();
     _klipleriYukle();
+    kartArkasiStili = Hesap.o.kartArkasi;
+    _muzikBaslat();
+    Izleme.o.olay('oyun_basladi', {'mod': _online ? 'online' : 'bot', 'oyuncu': widget.adlar.isNotEmpty ? widget.adlar.length : widget.botSayisi + 1, 'devam': widget.kayit != null});
     if (_online) {
       _netAbone = widget.net!.mesajlar.listen(_netMesaj);
       widget.net!.koptu.listen((_) {
@@ -241,6 +248,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _mesaj(m['m'] as String? ?? '');
       case 'sohbet':
         _sohbetGoster(game.players[m['kim'] as int], m['soz'] as String);
+      case 'siran':
+        _efektCal('ef_karistir');
+        if (mounted) _mesaj('Sıra sende!');
       case 'odul':
         _odul = m;
         Hesap.o.odulGeldi(m);
@@ -294,6 +304,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _tts.stop();
     _klip.dispose();
     _sohbetKlip.dispose();
+    _muzik.dispose();
+    _efekt.dispose();
+    _sohbetYazi.dispose();
     _dinleyici.dispose();
     _netAbone?.cancel();
     widget.net?.kapat();
@@ -401,6 +414,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   bool _emojiMi(String s) => sohbetEmojileri.contains(s);
 
+  Future<void> _muzikBaslat() async {
+    if (!Ayarlar.o.muzik) return;
+    try {
+      await _muzik.setReleaseMode(ReleaseMode.loop);
+      await _muzik.setVolume(0.35);
+      await _muzik.play(AssetSource('ses/muzik.mp3'));
+    } catch (_) {}
+  }
+
+  Future<void> _efektCal(String ad) async {
+    if (!_sesli) return;
+    try {
+      await _efekt.play(AssetSource('ses/$ad.mp3'));
+    } catch (_) {}
+  }
+
   void _sohbetAc() {
     showModalBottomSheet(
       context: context,
@@ -422,6 +451,33 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             ),
             const Divider(color: Colors.white24),
           ],
+          Row(children: [
+            Expanded(
+              child: TextField(
+                controller: _sohbetYazi,
+                maxLength: 80,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(hintText: 'Mesaj yaz…', hintStyle: TextStyle(color: Colors.white38), counterText: '', enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white38)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.amber)), isDense: true),
+                onSubmitted: (v) {
+                  if (v.trim().isEmpty) return;
+                  Navigator.pop(ctx);
+                  _sohbetGonder(v.trim());
+                  _sohbetYazi.clear();
+                },
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.send, color: Colors.amber),
+              onPressed: () {
+                final v = _sohbetYazi.text.trim();
+                if (v.isEmpty) return;
+                Navigator.pop(ctx);
+                _sohbetGonder(v);
+                _sohbetYazi.clear();
+              },
+            ),
+          ]),
+          const SizedBox(height: 6),
           Wrap(spacing: 8, runSpacing: 4, children: [
             for (final e in sohbetEmojileri)
               InkWell(
@@ -452,6 +508,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   void _sohbetGonder(String soz) {
+    soz = _sansur(soz);
     if (_online) {
       widget.net!.gonder({'t': 'sohbet', 'soz': soz});
       return; // sunucudan herkese (bize de) döner
@@ -466,6 +523,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       });
     }
   }
+
+  static const _kotu = ['amk', 'aq', 'orospu', 'piç', 'sik', 'yarak', 'göt', 'ibne', 'kahpe', 'salak', 'aptal', 'gerizekal', 'bok', 'puşt', 'kaltak', 'fuck', 'shit'];
+  String _sansur(String s) => s.split(' ').map((k) {
+        final d = k.toLowerCase().replaceAll('ı', 'i').replaceAll('ş', 's').replaceAll('ğ', 'g').replaceAll('ü', 'u').replaceAll('ö', 'o').replaceAll('ç', 'c');
+        return _kotu.any((x) => d == x || (x.length >= 4 && d.startsWith(x))) ? '*' * k.length : k;
+      }).join(' ');
 
   void _sohbetGoster(Player p, String soz) {
     if (!mounted) return;
@@ -561,6 +624,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final deste = _masaNokta(_kDeck), yakilan = _masaNokta(_kMerkez);
     switch (e.tip) {
       case EvTip.cek:
+        _efektCal('ef_dagit');
         if (kim == ben) {
           // desteden elime: masadan çıkıp 2B ele iner
           await _ucur(e.card, _nokta(_kDeck), _elNoktasi(kim!), ms: 520, w: 60, scaleTo: 1.25);
@@ -569,8 +633,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
         await Future.delayed(const Duration(milliseconds: 120));
       case EvTip.mulk:
+        _efektCal('ef_cevir');
         await _masaUcur(e.card, elM(kim!), setM(kim), ms: 520, w: kim == ben ? 56 : 46);
       case EvTip.banka:
+        _efektCal('ef_para');
         await _masaUcur(e.card, elM(kim!), bankaM(kim), ms: 480, w: kim == ben ? 56 : 46);
       case EvTip.aksiyon:
         final orta = Offset((deste.dx + yakilan.dx) / 2, deste.dy - 90);
@@ -618,6 +684,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     a.kaydet();
     _basarimKontrol(k == ben);
     if (!_online) _sonucGonder(k == ben);
+    Izleme.o.olay('oyun_bitti', {'mod': _online ? 'online' : 'bot', 'kazandim': k == ben, 'tur': _benimTurum, 'perf': Izleme.o.performansOzeti()});
     if (!_online) a.kayitYaz(null);
     final oran = a.oynanan == 0 ? 0 : (a.kazanilan * 100 / a.oynanan).round();
     final sira = [...game.players]..sort((x, y) => y.varlikToplam.compareTo(x.varlikToplam));

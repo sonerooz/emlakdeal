@@ -409,15 +409,25 @@ class _NoktaCizgi extends CustomPainter {
 }
 
 /// Arka yüz (rakibin eli / deste).
+/// Seçili kart arkası (dükkândan); oyun ekranı Hesap'tan okuyup atar.
+String kartArkasiStili = 'klasik';
+
 class CardBack extends StatelessWidget {
-  const CardBack({super.key, this.w = 40});
+  const CardBack({super.key, this.w = 40, this.stil});
   final double w;
+  final String? stil;
+  static const _stiller = {
+    'klasik': [Color(0xFFB3202D), Color(0xFF7A1019)],
+    'kart_altin': [Color(0xFFE0B13A), Color(0xFF8A6210)],
+    'kart_gece': [Color(0xFF26407A), Color(0xFF0F1A3A)],
+    'kart_mermer': [Color(0xFFEDE6DA), Color(0xFF9A9088)],
+  };
   @override
   Widget build(BuildContext context) => Container(
         width: w,
         height: w * 1.45,
         decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [Color(0xFFB3202D), Color(0xFF7A1019)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+          gradient: LinearGradient(colors: _stiller[stil ?? kartArkasiStili] ?? _stiller['klasik']!, begin: Alignment.topLeft, end: Alignment.bottomRight),
           borderRadius: BorderRadius.circular(w * 0.09),
           border: Border.all(color: Colors.black26),
         ),
@@ -427,7 +437,7 @@ class CardBack extends StatelessWidget {
           height: w * 0.7 * 1.45,
           decoration: BoxDecoration(border: Border.all(color: Colors.white38), borderRadius: BorderRadius.circular(w * 0.06)),
           alignment: Alignment.center,
-          child: Text('ED', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w900, fontSize: w / 3.5)),
+          child: Text('ED', style: TextStyle(color: (stil ?? kartArkasiStili) == 'kart_mermer' ? Colors.black45 : Colors.white70, fontWeight: FontWeight.w900, fontSize: w / 3.5)),
         ),
       );
 }

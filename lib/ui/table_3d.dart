@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../model/cards.dart';
 import '../model/game.dart';
 import 'card_widget.dart';
+import 'dukkan_ekrani.dart' show masaRengi;
+import '../hesap.dart';
 
 /// Masa düzleminde uçan kart (masa koordinatlarında, perspektifle birlikte döner).
 class MasaUcus {
@@ -234,7 +236,7 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
           height: masaR * 2,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: const RadialGradient(colors: [Color(0xFF2E8B57), Color(0xFF1B5E3A), Color(0xFF12452A)], stops: [0, 0.7, 1]),
+            gradient: RadialGradient(colors: [Color.lerp(masaRengi(Hesap.o.masa), Colors.white, 0.18)!, masaRengi(Hesap.o.masa), Color.lerp(masaRengi(Hesap.o.masa), Colors.black, 0.3)!], stops: const [0, 0.7, 1]),
             border: Border.all(color: const Color(0xFF5C3A1E), width: 26),
             boxShadow: const [BoxShadow(color: Colors.black87, blurRadius: 60, spreadRadius: 10, offset: Offset(0, 30))],
           ),

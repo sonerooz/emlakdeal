@@ -19,6 +19,9 @@ class Hesap {
   String get avatar => profil?['avatar'] as String? ?? '🙂';
   int get level => profil?['level'] as int? ?? 1;
   int get altin => profil?['altin'] as int? ?? 0;
+  List<String> get esyalar => ((profil?['esyalar'] as List?) ?? const []).cast<String>();
+  String get kartArkasi => profil?['kartArkasi'] as String? ?? 'klasik';
+  String get masa => profil?['masa'] as String? ?? 'yesil';
 
   Future<void> yukle() async {
     _p = await SharedPreferences.getInstance();
@@ -54,6 +57,7 @@ class Hesap {
         final y = await r.close().timeout(const Duration(seconds: 10));
         final m = jsonDecode(await y.transform(utf8.decoder).join());
         if (y.statusCode >= 400) throw HesapHatasi((m is Map ? m['hata'] : null)?.toString() ?? 'Sunucu hatası ${y.statusCode}', y.statusCode);
+        if (m is List) return {'_': m};
         return (m as Map).cast<String, dynamic>();
       } on HesapHatasi {
         rethrow;
@@ -156,6 +160,51 @@ class Hesap {
       return null;
     }
   }
+
+  /// Yetkili POST (hata/olay raporu gibi); sonuç önemsiz, sessiz.
+  Future<void> gonder(String yol, Map<String, dynamic> govde) async {
+    try {
+      await _istek(yol, govde: govde);
+    } catch (_) {}
+  }
+
+  Future<List<Map<String, dynamic>>> _liste(String yol) async {
+    final r = await _istek(yol);
+    return [for (final e in (r['_'] as List)) Map<String, dynamic>.from(e as Map)];
+  }
+
+  Future<List<Map<String, dynamic>>> magaza() => _liste('/api/magaza');
+  Future<List<Map<String, dynamic>>> arkadaslar() => _liste('/api/arkadaslar');
+  Future<List<Map<String, dynamic>>> gecmis() => _liste('/api/gecmis');
+
+  Future<String?> satinAl(String esya) async {
+    try {
+      await _profilKaydet(await _istek('/api/satin_al', govde: {'esya': esya}));
+      return null;
+    } on HesapHatasi catch (e) {
+      return e.mesaj;
+    }
+  }
+
+  Future<String?> secim({String? kartArkasi, String? masa}) async {
+    try {
+      await _profilKaydet(await _istek('/api/secim', govde: {if (kartArkasi != null) 'kartArkasi': kartArkasi, if (masa != null) 'masa': masa}));
+      return null;
+    } on HesapHatasi catch (e) {
+      return e.mesaj;
+    }
+  }
+
+  Future<String?> arkadasEkle(String nick) async {
+    try {
+      await _istek('/api/arkadaslar', govde: {'nick': nick});
+      return null;
+    } on HesapHatasi catch (e) {
+      return e.mesaj;
+    }
+  }
+
+  Future<void> arkadasSil(String nick) => gonder('/api/arkadaslar', {'nick': nick, 'sil': true});
 
   Future<List<Map<String, dynamic>>> liderlik() async {
     for (final kok in [_apiKok, _apiKokYerel]) {

@@ -12,6 +12,7 @@ import 'package:emlakdeal_cekirdek/game.dart';
 import 'package:emlakdeal_cekirdek/seviye.dart';
 
 import 'db.dart';
+import 'filtre.dart';
 
 final odalar = <String, Oda>{};
 final liderlik = Liderlik('liderlik.json');
@@ -57,12 +58,16 @@ final rng = Random();
 
 void log(String s) => stdout.writeln('${DateTime.now().toIso8601String().substring(11, 19)} $s');
 
+final cevrimici = <int, Baglanti>{}; // kullanıcı id → bağlantı (davet/sıra bildirimi)
+
 class Baglanti {
   Baglanti(this.ws);
   final WebSocket ws;
   String ad = 'Oyuncu';
   Oda? oda;
   Koltuk? koltuk;
+  int? kullaniciId;
+  DateTime sonSohbet = DateTime.fromMillisecondsSinceEpoch(0);
   void gonder(Map<String, dynamic> m) {
     try {
       ws.add(jsonEncode(m));
@@ -145,6 +150,7 @@ class Oda {
     _sonSira = g.current;
     turSayaci?.cancel();
     sureBitis = null;
+    koltukOf(g.aktif)?.bag?.gonder({'t': 'siran'});
     if (turSuresi <= 0 || g.kazanan != null || aktifBotMu(g)) return;
     sureBitis = DateTime.now().add(Duration(seconds: turSuresi));
     final sira = g.current;
@@ -431,6 +437,10 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
     case 'kur':
       final pr = _profilden(m);
       b.ad = pr.ad;
+      if (pr.id != null) {
+        b.kullaniciId = pr.id;
+        cevrimici[pr.id!] = b;
+      }
       final oda = Oda(yeniKod(), Koltuk(b.ad, b, kullaniciId: pr.id, avatar: pr.avatar, level: pr.level));
       oda.koltuklar.add(oda.sahip);
       oda.botSayisi = ((m['bot'] as int?) ?? 1).clamp(0, 3);
@@ -448,6 +458,10 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
       }
       final pr = _profilden(m);
       b.ad = pr.ad;
+      if (pr.id != null) {
+        b.kullaniciId = pr.id;
+        cevrimici[pr.id!] = b;
+      }
       // aynı adla kopan koltuğa geri dön
       final eski = oda.koltuklar.where((k) => k.bag == null && k.ad == b.ad).firstOrNull;
       if (eski != null) {
@@ -517,11 +531,38 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
     case 'sohbet':
       final oda = b.oda;
       final k = b.koltuk;
-      final soz = (m['soz'] as String? ?? '').trim();
-      if (oda == null || k == null || soz.isEmpty || soz.length > 60) return;
+      var soz = (m['soz'] as String? ?? '').trim();
+      if (oda == null || k == null || soz.isEmpty || soz.length > 80) return;
+      if (DateTime.now().difference(b.sonSohbet) < const Duration(milliseconds: 700)) return; // hız sınırı
+      b.sonSohbet = DateTime.now();
+      soz = sansurle(soz);
       final g = oda.game;
       final kim = g == null || k.player == null ? -1 : g.players.indexOf(k.player!);
       oda.herkese({'t': 'sohbet', 'kim': kim, 'ad': k.ad, 'soz': soz});
+    case 'kimlik':
+      // menüde açık tutulan bağlantı: davet ve bildirim için çevrim içi kaydı
+      final id = db.oturumKim(m['token'] as String?);
+      if (id != null) {
+        b.kullaniciId = id;
+        cevrimici[id] = b;
+        b.gonder({'t': 'kimlik', 'ok': true});
+      } else {
+        b.gonder({'t': 'kimlik', 'ok': false});
+      }
+    case 'davet':
+      final oda = b.oda;
+      final hedef = db.idBul(m['nick'] as String? ?? '');
+      if (oda == null || hedef == null) {
+        b.gonder({'t': 'bilgi', 'm': 'Davet gönderilemedi.'});
+        return;
+      }
+      final hb = cevrimici[hedef];
+      if (hb == null || hb.ws.readyState != WebSocket.open) {
+        b.gonder({'t': 'bilgi', 'm': '${m['nick']} şu an çevrim içi değil.'});
+        return;
+      }
+      hb.gonder({'t': 'davet', 'kim': b.ad, 'oda': oda.kod});
+      b.gonder({'t': 'bilgi', 'm': '${m['nick']} davet edildi.'});
     case 'ping':
       b.gonder({'t': 'pong'});
     default:
@@ -541,6 +582,8 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
 }
 
 void kopti(Baglanti b) {
+  final kid = b.kullaniciId;
+  if (kid != null && cevrimici[kid] == b) cevrimici.remove(kid);
   final oda = b.oda;
   final k = b.koltuk;
   if (oda == null || k == null) return;
@@ -659,6 +702,47 @@ Future<void> _api(HttpRequest req) async {
         return yaz(200, db.bonusAl(kim));
       case '/api/liderlik':
         return yaz(200, db.liderlik());
+      case '/api/magaza':
+        return yaz(200, [for (final e in Db.magaza.entries) {'id': e.key, 'ad': e.value.$1, 'fiyat': e.value.$2, 'tur': e.value.$3}]);
+      case '/api/satin_al':
+        if (kim == null) return yaz(401, {'hata': 'oturum yok'});
+        final h = db.satinAl(kim, govde['esya'] as String? ?? '');
+        if (h != null) return yaz(400, {'hata': h});
+        return yaz(200, db.profil(kim));
+      case '/api/secim':
+        if (kim == null) return yaz(401, {'hata': 'oturum yok'});
+        final h = db.secimKaydet(kim, kartArkasi: govde['kartArkasi'] as String?, masa: govde['masa'] as String?);
+        if (h != null) return yaz(400, {'hata': h});
+        return yaz(200, db.profil(kim));
+      case '/api/arkadaslar':
+        if (kim == null) return yaz(401, {'hata': 'oturum yok'});
+        if (req.method == 'POST') {
+          if (govde['sil'] == true) {
+            db.arkadasSil(kim, govde['nick'] as String? ?? '');
+          } else {
+            final h = db.arkadasEkle(kim, govde['nick'] as String? ?? '');
+            if (h != null) return yaz(400, {'hata': h});
+          }
+        }
+        final l = db.arkadaslar(kim);
+        for (final a in l) {
+          final c = cevrimici[a['id'] as int];
+          a['cevrimici'] = c != null && c.ws.readyState == WebSocket.open;
+          a['odada'] = c?.oda?.kod;
+        }
+        return yaz(200, l);
+      case '/api/gecmis':
+        if (kim == null) return yaz(401, {'hata': 'oturum yok'});
+        return yaz(200, db.gecmis(kim));
+      case '/api/hata':
+        db.hataKaydet(kullaniciId: kim, surum: govde['surum'] as String?, cihaz: govde['cihaz'] as String?, mesaj: govde['mesaj'] as String? ?? '?', yigin: govde['yigin'] as String?);
+        log('İSTEMCİ HATASI (${kim ?? '-'}): ${(govde['mesaj'] as String? ?? '').split('\n').first}');
+        return yaz(200, {'ok': true});
+      case '/api/olay':
+        db.olayKaydet(kullaniciId: kim, ad: govde['ad'] as String? ?? '?', veri: govde['veri'] == null ? null : jsonEncode(govde['veri']));
+        return yaz(200, {'ok': true});
+      case '/api/ozet':
+        return yaz(200, db.ozet());
       default:
         return yaz(404, {'hata': 'yok'});
     }

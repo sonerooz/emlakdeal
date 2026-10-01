@@ -4,18 +4,24 @@ import 'ui/game_screen.dart';
 import 'ayarlar.dart';
 import 'basarimlar.dart';
 import 'hesap.dart';
+import 'izleme.dart';
+import 'net/istemci.dart';
+import 'ui/card_widget.dart' show kartArkasiStili;
+import 'ui/dukkan_ekrani.dart';
+import 'ui/lobi.dart' show LobiEkrani;
+import 'ui/sosyal_ekrani.dart';
 import 'ui/profil_ekrani.dart';
 import 'ui/ayarlar_ekrani.dart';
 import 'ui/basarimlar_ekrani.dart';
-import 'ui/lobi.dart';
 import 'ui/ogretici.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  Izleme.o.kur();
   await Ayarlar.o.yukle();
   await BasarimDurumu.o.yukle();
   await Hesap.o.yukle();
-  Hesap.o.baglan(); // arka planda; sunucu yoksa sessiz
+  Hesap.o.baglan().then((_) => kartArkasiStili = Hesap.o.kartArkasi); // arka planda; sunucu yoksa sessiz
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const EmlakDealApp());
 }
@@ -39,12 +45,59 @@ class MenuScreen extends StatefulWidget {
 
 class _MenuScreenState extends State<MenuScreen> {
   int _bot = 1;
+  Istemci? _varlik; // çevrim içi kaydı: arkadaş davetleri buradan gelir
+
+  Future<void> _varlikBaglan() async {
+    if (Hesap.o.token == null) return;
+    try {
+      final n = Istemci(Ayarlar.o.sunucu);
+      try {
+        await n.baglan();
+      } catch (_) {
+        final y = Istemci(Ayarlar.sunucuYerel);
+        await y.baglan();
+        _varlik = y;
+      }
+      _varlik ??= n;
+      _varlik!.gonder({'t': 'kimlik', 'token': Hesap.o.token});
+      _varlik!.mesajlar.listen((m) {
+        if (m['t'] == 'davet' && mounted) _davetGeldi(m['kim'] as String, m['oda'] as String);
+      });
+    } catch (_) {}
+  }
+
+  void _davetGeldi(String kim, String oda) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('🎉 Oyun daveti'),
+        content: Text('$kim seni "$oda" odasına çağırıyor.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Şimdi değil')),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _ac(LobiEkrani(odaKodu: oda));
+            },
+            child: const Text('Katıl'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _varlik?.kapat();
+    super.dispose();
+  }
 
   @override
   void initState() {
     super.initState();
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) setState(() {});
+      _varlikBaglan();
     });
     if (!Ayarlar.o.ogreticiGoruldu) {
       WidgetsBinding.instance.addPostFrameCallback((_) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OgreticiEkrani())));
@@ -184,6 +237,18 @@ class _MenuScreenState extends State<MenuScreen> {
                   onPressed: () => _ac(const ProfilEkrani()),
                   icon: const Icon(Icons.account_circle),
                   label: const Text('Profilim'),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.amber, side: const BorderSide(color: Colors.amber)),
+                  onPressed: () => _ac(const DukkanEkrani()),
+                  icon: const Icon(Icons.storefront),
+                  label: const Text('Dükkân'),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
+                  onPressed: () => _ac(const SosyalEkrani()),
+                  icon: const Icon(Icons.group),
+                  label: const Text('Arkadaşlar'),
                 ),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),

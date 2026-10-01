@@ -36,6 +36,13 @@ class _AyarlarEkraniState extends State<AyarlarEkrani> {
           title: const Text('Oyuncu sesleri', style: TextStyle(color: Colors.white)),
           subtitle: const Text('Kira istiyorum, reddediyorum… konuşmaları', style: TextStyle(color: Colors.white54)),
         ),
+        SwitchListTile(
+          value: a.muzik,
+          onChanged: (v) => setState(() => a.muzik = v),
+          activeColor: Colors.amber,
+          title: const Text('Arka plan müziği', style: TextStyle(color: Colors.white)),
+          subtitle: const Text('Masada hafif lounge müziği', style: TextStyle(color: Colors.white54)),
+        ),
         const SizedBox(height: 8),
         const Text('Bot zorluğu', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),

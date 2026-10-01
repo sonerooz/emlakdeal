@@ -60,6 +60,43 @@ class Db {
     try {
       _db.execute('ALTER TABLE kullanicilar ADD COLUMN son_bonus TEXT');
     } catch (_) {}
+    for (final sutun in ['kart_arkasi TEXT NOT NULL DEFAULT \'klasik\'', 'masa TEXT NOT NULL DEFAULT \'yesil\'']) {
+      try {
+        _db.execute('ALTER TABLE kullanicilar ADD COLUMN $sutun');
+      } catch (_) {}
+    }
+    _db.execute('''
+      CREATE TABLE IF NOT EXISTS esyalar (
+        kullanici_id INTEGER NOT NULL REFERENCES kullanicilar(id) ON DELETE CASCADE,
+        esya TEXT NOT NULL,
+        tarih TEXT NOT NULL,
+        PRIMARY KEY (kullanici_id, esya)
+      )''');
+    _db.execute('''
+      CREATE TABLE IF NOT EXISTS arkadaslar (
+        kullanici_id INTEGER NOT NULL REFERENCES kullanicilar(id) ON DELETE CASCADE,
+        arkadas_id INTEGER NOT NULL REFERENCES kullanicilar(id) ON DELETE CASCADE,
+        tarih TEXT NOT NULL,
+        PRIMARY KEY (kullanici_id, arkadas_id)
+      )''');
+    _db.execute('''
+      CREATE TABLE IF NOT EXISTS hatalar (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tarih TEXT NOT NULL,
+        kullanici_id INTEGER,
+        surum TEXT,
+        cihaz TEXT,
+        mesaj TEXT NOT NULL,
+        yigin TEXT
+      )''');
+    _db.execute('''
+      CREATE TABLE IF NOT EXISTS olaylar (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tarih TEXT NOT NULL,
+        kullanici_id INTEGER,
+        ad TEXT NOT NULL,
+        veri TEXT
+      )''');
     _db.execute('CREATE INDEX IF NOT EXISTS ix_gecmis_kullanici ON oyun_gecmisi(kullanici_id)');
     _db.execute('CREATE INDEX IF NOT EXISTS ix_lider ON kullanicilar(level DESC, xp DESC)');
   }
@@ -123,6 +160,9 @@ class Db {
       'facebook': r['facebook_id'] != null,
       'apple': r['apple_id'] != null,
       'basarimlar': [for (final b in _db.select('SELECT basarim FROM basarimlar WHERE kullanici_id = ?', [id])) b['basarim']],
+      'esyalar': esyalar(id),
+      'kartArkasi': r['kart_arkasi'] ?? 'klasik',
+      'masa': r['masa'] ?? 'yesil',
     };
   }
 
@@ -240,6 +280,91 @@ class Db {
   void basarimEkle(int id, String basarim) {
     _db.execute('INSERT OR IGNORE INTO basarimlar (kullanici_id, basarim, tarih) VALUES (?, ?, ?)', [id, basarim, _simdi()]);
   }
+
+  // ------------------------------------------------------------ dükkân
+  /// Satın alınabilir eşyalar: id → (ad, fiyat, tür). Tür: kart (kart arkası), masa (çuha), avatar.
+  static const magaza = <String, (String, int, String)>{
+    'kart_altin': ('Altın Kart Arkası', 300, 'kart'),
+    'kart_gece': ('Gece Mavisi Kart Arkası', 300, 'kart'),
+    'kart_mermer': ('Mermer Kart Arkası', 500, 'kart'),
+    'masa_bordo': ('Bordo Çuha', 400, 'masa'),
+    'masa_lacivert': ('Lacivert Çuha', 400, 'masa'),
+    'masa_siyah': ('Siyah Çuha (VIP)', 800, 'masa'),
+    'avatar_paket': ('Özel Avatarlar (8 adet)', 600, 'avatar'),
+  };
+
+  List<String> esyalar(int id) => [for (final r in _db.select('SELECT esya FROM esyalar WHERE kullanici_id = ?', [id])) r['esya'] as String];
+
+  String? satinAl(int id, String esya) {
+    final e = magaza[esya];
+    if (e == null) return 'Böyle bir eşya yok.';
+    if (esyalar(id).contains(esya)) return 'Zaten sende.';
+    final altin = _db.select('SELECT altin FROM kullanicilar WHERE id = ?', [id]).first['altin'] as int;
+    if (altin < e.$2) return 'Yeterli altın yok (${e.$2} gerekli).';
+    _db.execute('UPDATE kullanicilar SET altin = altin - ? WHERE id = ?', [e.$2, id]);
+    _db.execute('INSERT INTO esyalar (kullanici_id, esya, tarih) VALUES (?, ?, ?)', [id, esya, _simdi()]);
+    return null;
+  }
+
+  String? secimKaydet(int id, {String? kartArkasi, String? masa}) {
+    final sahip = {'klasik', 'yesil', ...esyalar(id)};
+    if (kartArkasi != null) {
+      if (!sahip.contains(kartArkasi)) return 'Bu kart arkası sende yok.';
+      _db.execute('UPDATE kullanicilar SET kart_arkasi = ? WHERE id = ?', [kartArkasi, id]);
+    }
+    if (masa != null) {
+      if (!sahip.contains(masa)) return 'Bu masa sende yok.';
+      _db.execute('UPDATE kullanicilar SET masa = ? WHERE id = ?', [masa, id]);
+    }
+    return null;
+  }
+
+  // ------------------------------------------------------------ arkadaşlar
+  String? arkadasEkle(int id, String nick) {
+    final r = _db.select('SELECT id FROM kullanicilar WHERE nick = ?', [nick.trim()]);
+    if (r.isEmpty) return 'Böyle bir oyuncu yok.';
+    final a = r.first['id'] as int;
+    if (a == id) return 'Kendini ekleyemezsin.';
+    _db.execute('INSERT OR IGNORE INTO arkadaslar (kullanici_id, arkadas_id, tarih) VALUES (?, ?, ?)', [id, a, _simdi()]);
+    return null;
+  }
+
+  void arkadasSil(int id, String nick) {
+    _db.execute('DELETE FROM arkadaslar WHERE kullanici_id = ? AND arkadas_id = (SELECT id FROM kullanicilar WHERE nick = ?)', [id, nick.trim()]);
+  }
+
+  List<Map<String, dynamic>> arkadaslar(int id) => [
+        for (final r in _db.select('SELECT k.id, k.nick, k.avatar, k.level, k.son_giris FROM arkadaslar a JOIN kullanicilar k ON k.id = a.arkadas_id WHERE a.kullanici_id = ? ORDER BY k.nick', [id]))
+          {'id': r['id'], 'nick': r['nick'], 'avatar': r['avatar'], 'level': r['level'], 'sonGiris': r['son_giris']}
+      ];
+
+  int? idBul(String nick) {
+    final r = _db.select('SELECT id FROM kullanicilar WHERE nick = ?', [nick.trim()]);
+    return r.isEmpty ? null : r.first['id'] as int;
+  }
+
+  // ------------------------------------------------------------ geçmiş / izleme
+  List<Map<String, dynamic>> gecmis(int id, {int limit = 30}) => [
+        for (final r in _db.select('SELECT tarih, mod, kazandi, rakip, zorluk, xp, altin FROM oyun_gecmisi WHERE kullanici_id = ? ORDER BY id DESC LIMIT ?', [id, limit]))
+          {'tarih': r['tarih'], 'mod': r['mod'], 'kazandi': r['kazandi'] == 1, 'rakip': r['rakip'], 'zorluk': r['zorluk'], 'xp': r['xp'], 'altin': r['altin']}
+      ];
+
+  void hataKaydet({int? kullaniciId, String? surum, String? cihaz, required String mesaj, String? yigin}) {
+    _db.execute('INSERT INTO hatalar (tarih, kullanici_id, surum, cihaz, mesaj, yigin) VALUES (?, ?, ?, ?, ?, ?)',
+        [_simdi(), kullaniciId, surum, cihaz, mesaj.length > 2000 ? mesaj.substring(0, 2000) : mesaj, yigin == null ? null : (yigin.length > 8000 ? yigin.substring(0, 8000) : yigin)]);
+  }
+
+  void olayKaydet({int? kullaniciId, required String ad, String? veri}) {
+    _db.execute('INSERT INTO olaylar (tarih, kullanici_id, ad, veri) VALUES (?, ?, ?, ?)', [_simdi(), kullaniciId, ad, veri]);
+  }
+
+  Map<String, dynamic> ozet() => {
+        'kullanici': _db.select('SELECT count(*) c FROM kullanicilar').first['c'],
+        'oyun': _db.select('SELECT count(*) c FROM oyun_gecmisi').first['c'],
+        'hata24s': _db.select("SELECT count(*) c FROM hatalar WHERE tarih > datetime('now', '-1 day')").first['c'],
+        'olay24s': _db.select("SELECT count(*) c FROM olaylar WHERE tarih > datetime('now', '-1 day')").first['c'],
+        'sonHatalar': [for (final r in _db.select('SELECT tarih, mesaj FROM hatalar ORDER BY id DESC LIMIT 5')) {'tarih': r['tarih'], 'mesaj': r['mesaj']}],
+      };
 
   List<Map<String, dynamic>> liderlik({int limit = 50}) => [
         for (final r in _db.select('SELECT nick, avatar, level, xp, oyun, galibiyet, online_galibiyet FROM kullanicilar WHERE oyun > 0 ORDER BY level DESC, xp DESC, galibiyet DESC LIMIT ?', [limit]))

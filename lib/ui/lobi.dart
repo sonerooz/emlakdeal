@@ -4,12 +4,15 @@ import '../ayarlar.dart';
 import '../hesap.dart';
 import '../net/istemci.dart';
 import 'game_screen.dart';
+import 'sosyal_ekrani.dart';
 
 const varsayilanSunucu = 'wss://emlakdeal.tailb92005.ts.net';
 
 /// Online oyun: sunucuya bağlan, oda kur / odaya katıl, oyuncuları gör, başlat.
 class LobiEkrani extends StatefulWidget {
-  const LobiEkrani({super.key});
+  const LobiEkrani({super.key, this.odaKodu});
+  /// Davetle gelindiyse otomatik katılınacak oda.
+  final String? odaKodu;
   @override
   State<LobiEkrani> createState() => _LobiEkraniState();
 }
@@ -26,6 +29,15 @@ class _LobiEkraniState extends State<LobiEkrani> {
   bool _hazir = false;
   bool _mesgul = false;
   String? _hata;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.odaKodu != null) {
+      _kod.text = widget.odaKodu!;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _baglan({'t': 'katil', 'ad': _ad.text, 'oda': _kod.text, 'token': Hesap.o.token}));
+    }
+  }
 
   @override
   void dispose() {
@@ -80,6 +92,8 @@ class _LobiEkraniState extends State<LobiEkrani> {
         });
       case 'hata':
         setState(() => _hata = m['m'] as String?);
+      case 'bilgi':
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m['m'] as String? ?? '')));
       case 'basladi':
         final net = _net!;
         _abone?.cancel();
@@ -140,7 +154,14 @@ class _LobiEkraniState extends State<LobiEkrani> {
               child: Column(children: [
                 const Text('ODA KODU', style: TextStyle(color: Colors.white54, letterSpacing: 2, fontSize: 12)),
                 Text(oda['kod'] as String, style: const TextStyle(color: Colors.amber, fontSize: 48, fontWeight: FontWeight.w900, letterSpacing: 10)),
-                const Text('Aynı ağdaki arkadaşların bu kodla katılır', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                const Text('Arkadaşların bu kodla katılır', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => SosyalEkrani(odaKodu: oda['kod'] as String, davetGonder: (nick) => _net?.gonder({'t': 'davet', 'nick': nick})),
+                  )),
+                  icon: const Icon(Icons.person_add, color: Colors.amber),
+                  label: const Text('Arkadaş davet et', style: TextStyle(color: Colors.amber)),
+                ),
               ]),
             ),
             const SizedBox(height: 20),
