@@ -75,18 +75,33 @@ extension PColorX on PColor {
 
   bool get binaOlur => this != PColor.railroad && this != PColor.utility;
 
-  /// Türkçe (İstanbul) baskısındaki tapu adları; bilinmeyen setlerde boş (renk adı yazılır).
+  /// Her renk grubu bir Türk büyükşehrini temsil eder; kira sırası = şehir büyüklüğü/zenginliği.
+  /// Lacivert en pahalı (İstanbul), kahverengi en ucuz (Gaziantep).
+  String get sehir => const {
+        PColor.brown: 'Gaziantep',
+        PColor.lightBlue: 'Adana',
+        PColor.pink: 'Konya',
+        PColor.orange: 'Antalya',
+        PColor.red: 'Bursa',
+        PColor.yellow: 'İzmir',
+        PColor.green: 'Ankara',
+        PColor.darkBlue: 'İstanbul',
+        PColor.railroad: 'Kocaeli',
+        PColor.utility: 'Mersin',
+      }[this]!;
+
+  /// Setteki tapu adları: o şehrin en büyük/bilinen ilçeleri (pahalıdan ucuza).
   List<String> get sokaklar => const {
-        PColor.brown: ['Dolapdere', 'Kasımpaşa'],
-        PColor.lightBlue: ['Sirkeci', 'Karaköy', 'Sultanahmet'],
-        PColor.pink: ['Taksim', 'Beşiktaş', 'Beyoğlu'],
-        PColor.orange: ['Mecidiyeköy', 'Şişli', 'Harbiye'],
-        PColor.red: ['Bostancı', 'Kadıköy', 'Caddebostan'],
-        PColor.yellow: ['Maçka', 'Nişantaşı', 'Teşvikiye'],
-        PColor.green: ['Bebek', 'Levent', 'Etiler'],
-        PColor.darkBlue: ['Yeniköy', 'Tarabya'],
-        PColor.railroad: ['Kabataş Vapur İskelesi', 'Haydarpaşa Tren İstasyonu', 'Sirkeci Tren İstasyonu', 'Kadıköy Deniz Yolları'],
-        PColor.utility: ['Elektrik İdaresi', 'Sular İdaresi'],
+        PColor.brown: ['Şahinbey', 'Şehitkamil'],
+        PColor.lightBlue: ['Seyhan', 'Çukurova', 'Yüreğir'],
+        PColor.pink: ['Selçuklu', 'Meram', 'Karatay'],
+        PColor.orange: ['Muratpaşa', 'Konyaaltı', 'Kepez'],
+        PColor.red: ['Nilüfer', 'Osmangazi', 'Yıldırım'],
+        PColor.yellow: ['Konak', 'Karşıyaka', 'Bornova'],
+        PColor.green: ['Çankaya', 'Yenimahalle', 'Keçiören'],
+        PColor.darkBlue: ['Beşiktaş', 'Sarıyer'],
+        PColor.railroad: ['İzmit', 'Gebze', 'Darıca', 'Körfez'],
+        PColor.utility: ['Yenişehir', 'Mezitli'],
       }[this]!;
 }
 

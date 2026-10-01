@@ -176,7 +176,11 @@ class CardView extends StatelessWidget {
   Widget _tapu(PColor c) {
     return Column(children: [
       _bant(c.renk, card.sokak ?? c.ad, yuk: 0.3),
-      SizedBox(height: w * 0.03),
+      Padding(
+        padding: EdgeInsets.only(top: w * 0.015),
+        child: Text(c.sehir.toUpperCase(), style: TextStyle(fontSize: _fs * 0.5, fontWeight: FontWeight.w900, letterSpacing: 1, color: Colors.black54)),
+      ),
+      SizedBox(height: w * 0.015),
       Expanded(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.topCenter, child: SizedBox(width: w * 0.74, child: _kiraTablosu(c)))),
     ]);
   }

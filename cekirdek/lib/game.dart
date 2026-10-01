@@ -271,7 +271,7 @@ class Game extends Bildirici {
       final sec = c.isMultiWild ? PColor.values : c.colors;
       renk = await p.decider.jokerRengi(this, p, c, sec);
     }
-    await _soyle(p, c.isWild ? 'Jokeri ${renk.ad} setine koyuyorum.' : '${c.ad} tapusu masaya.');
+    await _soyle(p, c.isWild ? 'Jokeri ${renk.ad} setine koyuyorum.' : '${renk.ad} tapu masaya.');
     await _anim(GameEvent(EvTip.mulk, c, kim: p, renk: renk));
     p.hand.remove(c);
     p.mulkEkle(c, renk);
@@ -508,7 +508,7 @@ class Game extends Bildirici {
     await _sozBitsin();
     final r = sahibi(hedefMulk);
     if (r == null || r == p || !calinabilir(r).contains(hedefMulk)) return false;
-    await _soyle(p, hedefMulk.isWild ? 'Joker tapuyu alıyorum.' : '${hedefMulk.ad} tapusunu alıyorum.');
+    await _soyle(p, hedefMulk.isWild ? 'Joker tapuyu alıyorum.' : '${hedefMulk.etkinRenk!.ad} tapu alıyorum.');
     await _aksiyonuAt(p, c);
     _log('${p.name} Tapu Devri: ${hedefMulk.ad} çalmak istiyor.');
     if (!await _jsnZinciri(p, r, 'Tapu Devri (${hedefMulk.ad})')) {
