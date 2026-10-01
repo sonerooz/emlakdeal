@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
@@ -64,6 +65,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Player? _konusan;
   final FlutterTts _tts = FlutterTts();
   final AudioPlayer _klip = AudioPlayer();
+  final AudioPlayer _sohbetKlip = AudioPlayer();
+  final List<(Player, String)> _sohbetGecmis = [];
+  (Player, String)? _sohbetBalon;
+  int _sohbetNo = 0;
   Map<String, dynamic> _klipler = const {};
   bool _sesli = Ayarlar.o.sesli;
   bool _ttsHazir = false;
@@ -161,6 +166,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _mesaj(m['m'] as String? ?? 'Hata');
       case 'bilgi':
         _mesaj(m['m'] as String? ?? '');
+      case 'sohbet':
+        _sohbetGoster(game.players[m['kim'] as int], m['soz'] as String);
       case 'bitti':
         _bitisKontrol();
     }
@@ -209,6 +216,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   void dispose() {
     _tts.stop();
     _klip.dispose();
+    _sohbetKlip.dispose();
     _dinleyici.dispose();
     _netAbone?.cancel();
     widget.net?.kapat();
@@ -234,10 +242,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     return v is String ? v : null;
   }
 
-  Future<bool> _klipCal(String ad) async {
+  Future<bool> _klipCal(String ad, {AudioPlayer? oynatici}) async {
+    final o = oynatici ?? _klip;
     try {
-      final bitti = _klip.onPlayerComplete.first;
-      await _klip.play(AssetSource('ses/$ad'));
+      final bitti = o.onPlayerComplete.first;
+      await o.play(AssetSource('ses/$ad'));
       await bitti.timeout(const Duration(seconds: 10));
       return true;
     } catch (_) {
@@ -284,16 +293,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   Future<void> _sozBekle() => _sonSoz;
 
-  Future<void> _seslendir(Player p, String soz, int no) async {
-    if (!mounted) return;
-    setState(() {
-      _konusan = p;
-      _banner = soz;
-    });
+  /// Klip varsa onu, yoksa cihaz TTS'ini çalar; ses kapalıysa okuma süresi kadar bekler.
+  Future<void> _sesCal(Player p, String soz, {AudioPlayer? oynatici}) async {
     final klip = _klipAdi(p, soz);
-    if (_sesli && klip != null && await _klipCal(klip)) {
-      // önceden üretilmiş doğal ses çalındı
-    } else if (_sesli && _ttsHazir) {
+    if (_sesli && klip != null && await _klipCal(klip, oynatici: oynatici)) return;
+    if (_sesli && _ttsHazir) {
       try {
         final v = _sesler[p];
         if (v != null) await _tts.setVoice(v);
@@ -302,9 +306,107 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       } catch (_) {
         await Future.delayed(const Duration(milliseconds: 900));
       }
-    } else {
-      await Future.delayed(Duration(milliseconds: 500 + soz.length * 35));
+      return;
     }
+    await Future.delayed(Duration(milliseconds: 500 + soz.length * 35));
+  }
+
+  // ----------------------------------------------------------- sohbet / emoji
+  static const sohbetSozleri = ['Kahretsin!', 'Sen görürsün!', 'Bir dahaki sefere.', 'Bunun intikamı acı olur!', 'İyi oyundu!', 'Hahaha!',
+      'Şans işte.', 'Bravo!', 'Acele et biraz!', 'Teşekkürler.', 'Buna inanamıyorum!', 'Pes ediyorum.'];
+  static const sohbetEmojileri = ['😂', '😡', '😎', '👏', '🙏', '🤔', '😱', '🔥', '❤️', '🤝'];
+
+  bool _emojiMi(String s) => sohbetEmojileri.contains(s);
+
+  void _sohbetAc() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0F3D25),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (_sohbetGecmis.isNotEmpty) ...[
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 110),
+              child: ListView(
+                shrinkWrap: true,
+                reverse: true,
+                children: [
+                  for (final (p, m) in _sohbetGecmis.reversed.take(12))
+                    Text('${p == ben ? 'Sen' : p.name}: $m', style: TextStyle(color: p == ben ? Colors.amber : Colors.white70, fontSize: 13)),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.white24),
+          ],
+          Wrap(spacing: 8, runSpacing: 4, children: [
+            for (final e in sohbetEmojileri)
+              InkWell(
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _sohbetGonder(e);
+                },
+                child: Padding(padding: const EdgeInsets.all(4), child: Text(e, style: const TextStyle(fontSize: 26))),
+              ),
+          ]),
+          const SizedBox(height: 6),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final sz in sohbetSozleri)
+              ActionChip(
+                backgroundColor: Colors.white10,
+                side: const BorderSide(color: Colors.white24),
+                label: Text(sz, style: const TextStyle(color: Colors.white)),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _sohbetGonder(sz);
+                },
+              ),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  void _sohbetGonder(String soz) {
+    if (_online) {
+      widget.net!.gonder({'t': 'sohbet', 'soz': soz});
+      return; // sunucudan herkese (bize de) döner
+    }
+    _sohbetGoster(ben, soz);
+    // yerel oyunda botlar bazen cevap verir
+    if (!_emojiMi(soz) && botlar.isNotEmpty && Random().nextDouble() < 0.5) {
+      final b = botlar[Random().nextInt(botlar.length)];
+      final cevap = sohbetSozleri[Random().nextInt(sohbetSozleri.length)];
+      Future.delayed(const Duration(milliseconds: 1800), () {
+        if (mounted) _sohbetGoster(b, cevap);
+      });
+    }
+  }
+
+  void _sohbetGoster(Player p, String soz) {
+    if (!mounted) return;
+    final no = ++_sohbetNo;
+    setState(() {
+      _sohbetGecmis.add((p, soz));
+      if (_sohbetGecmis.length > 40) _sohbetGecmis.removeAt(0);
+      _sohbetBalon = (p, soz);
+    });
+    if (_emojiMi(soz)) {
+    } else {
+      _sesCal(p, soz, oynatici: _sohbetKlip);
+    }
+    Future.delayed(const Duration(milliseconds: 2800), () {
+      if (mounted && no == _sohbetNo) setState(() => _sohbetBalon = null);
+    });
+  }
+
+  Future<void> _seslendir(Player p, String soz, int no) async {
+    if (!mounted) return;
+    setState(() {
+      _konusan = p;
+      _banner = soz;
+    });
+    await _sesCal(p, soz);
     if (mounted && no == _sozSayac) {
       setState(() {
         _banner = null;
@@ -776,6 +878,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             foregroundColor: Colors.white,
             title: Text('Monopoly Deal · ${game.players.length} oyuncu', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
             actions: [
+              IconButton(tooltip: 'Sohbet / emoji', onPressed: _sohbetAc, icon: const Icon(Icons.chat_bubble_outline)),
               IconButton(
                 tooltip: _sesli ? 'Sesi kapat' : 'Sesi aç',
                 onPressed: () => setState(() {
@@ -823,6 +926,26 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                       child: IgnorePointer(child: u.arka ? CardBack(w: w) : CardView(u.card, w: w)),
                     );
                   },
+                ),
+              if (_sohbetBalon != null)
+                Positioned(
+                  right: 12,
+                  top: 56,
+                  child: IgnorePointer(
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 240),
+                      padding: EdgeInsets.symmetric(horizontal: _emojiMi(_sohbetBalon!.$2) ? 14 : 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _sohbetBalon!.$1 == ben ? const Color(0xFFFFE08A) : Colors.white,
+                        borderRadius: const BorderRadius.only(topLeft: Radius.circular(14), topRight: Radius.circular(14), bottomLeft: Radius.circular(14), bottomRight: Radius.circular(3)),
+                        boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 8, offset: Offset(0, 3))],
+                      ),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
+                        Text(_sohbetBalon!.$1 == ben ? 'Sen' : _sohbetBalon!.$1.name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.black54)),
+                        Text(_sohbetBalon!.$2, style: TextStyle(fontSize: _emojiMi(_sohbetBalon!.$2) ? 40 : 15, fontWeight: FontWeight.w700, color: Colors.black87)),
+                      ]),
+                    ),
+                  ),
                 ),
               if (_banner != null)
                 Positioned.fill(

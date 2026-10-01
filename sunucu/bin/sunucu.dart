@@ -360,6 +360,14 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
       unawaited(oda.hamle(k, m));
     case 'karar':
       b.koltuk?.karar?.cevap(m['id'] as int, m['deger']);
+    case 'sohbet':
+      final oda = b.oda;
+      final k = b.koltuk;
+      final soz = (m['soz'] as String? ?? '').trim();
+      if (oda == null || k == null || soz.isEmpty || soz.length > 60) return;
+      final g = oda.game;
+      final kim = g == null || k.player == null ? -1 : g.players.indexOf(k.player!);
+      oda.herkese({'t': 'sohbet', 'kim': kim, 'ad': k.ad, 'soz': soz});
     case 'ping':
       b.gonder({'t': 'pong'});
     default:
