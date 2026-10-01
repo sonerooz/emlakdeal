@@ -290,14 +290,46 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
       height: 120,
       child: Row(children: [
         Column(key: widget.deckKey, mainAxisSize: MainAxisSize.min, children: [
-          SizedBox(
-            width: 70,
-            height: 70 * 1.45 + 8,
-            child: Stack(children: [
-              for (var i = 0; i < min(4, (g.deck.length / 25).ceil()); i++)
-                Positioned(left: 0, top: 8.0 - i * 2.5, child: const CardBack(w: 64)),
-            ]),
-          ),
+          Builder(builder: (_) {
+            // 5 kalınlık durumu: >80 kart 5, >60 4, >40 3, >20 2, 1-20 1, boşsa çerçeve
+            final n = g.deck.length;
+            final durum = n == 0 ? 0 : n > 80 ? 5 : n > 60 ? 4 : n > 40 ? 3 : n > 20 ? 2 : 1;
+            final kat = durum * 3; // her durum 3 kart kalınlığı (her kat 1.3 px)
+            return SizedBox(
+              width: 78,
+              height: 64 * 1.45 + 22,
+              child: Stack(children: [
+                if (durum == 0)
+                  Positioned(
+                    left: 4,
+                    top: 18,
+                    child: Container(
+                      width: 64,
+                      height: 64 * 1.45,
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.white24, width: 1.5)),
+                      alignment: Alignment.center,
+                      child: const Text('BOŞ', style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900)),
+                    ),
+                  ),
+                // destenin kenarı (kalınlık): koyu şeritler
+                for (var i = 0; i < kat; i++)
+                  Positioned(
+                    left: 4 + i * 0.6,
+                    top: 18 - i * 1.3,
+                    child: Container(
+                      width: 64,
+                      height: 64 * 1.45,
+                      decoration: BoxDecoration(
+                        color: i.isEven ? const Color(0xFF5A0F17) : const Color(0xFF7A1019),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.black26, width: 0.5),
+                      ),
+                    ),
+                  ),
+                if (durum > 0) Positioned(left: 4 + kat * 0.6, top: 18 - kat * 1.3, child: const CardBack(w: 64)),
+              ]),
+            );
+          }),
           Text('${g.deck.length}', style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w700)),
         ]),
         const SizedBox(width: 26),
