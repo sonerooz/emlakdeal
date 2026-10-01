@@ -143,6 +143,20 @@ class Hesap {
     if (m['profil'] is Map) await _profilKaydet(Map<String, dynamic>.from(m['profil'] as Map));
   }
 
+  bool get bonusHazir => profil?['bonusHazir'] == true;
+  int get bonusMiktar => profil?['bonusMiktar'] as int? ?? 0;
+
+  /// Günlük bonusu al; {alindi, bonus} ya da null (sunucu yok).
+  Future<Map<String, dynamic>?> bonusAl() async {
+    try {
+      final r = await _istek('/api/bonus', govde: {});
+      await _profilKaydet(Map<String, dynamic>.from(r['profil'] as Map));
+      return r;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> liderlik() async {
     for (final kok in [_apiKok, _apiKokYerel]) {
       try {

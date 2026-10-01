@@ -654,6 +654,9 @@ Future<void> _api(HttpRequest req) async {
           db.basarimEkle(kim, '$b');
         }
         return yaz(200, r);
+      case '/api/bonus':
+        if (kim == null) return yaz(401, {'hata': 'oturum yok'});
+        return yaz(200, db.bonusAl(kim));
       case '/api/liderlik':
         return yaz(200, db.liderlik());
       default:

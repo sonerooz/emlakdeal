@@ -57,6 +57,9 @@ class Db {
         tarih TEXT NOT NULL,
         PRIMARY KEY (kullanici_id, basarim)
       )''');
+    try {
+      _db.execute('ALTER TABLE kullanicilar ADD COLUMN son_bonus TEXT');
+    } catch (_) {}
     _db.execute('CREATE INDEX IF NOT EXISTS ix_gecmis_kullanici ON oyun_gecmisi(kullanici_id)');
     _db.execute('CREATE INDEX IF NOT EXISTS ix_lider ON kullanicilar(level DESC, xp DESC)');
   }
@@ -70,10 +73,39 @@ class Db {
 
   static final nickKurali = RegExp(r'^[A-Za-zÇĞİÖŞÜçğıöşü0-9_ ]{3,16}$');
 
+  /// Türkiye saatiyle bugünün tarihi (YYYY-MM-DD) ve haftanın günü (Pzt=1..Paz=7).
+  static ({String tarih, int gun}) _bugun() {
+    final t = DateTime.now().toUtc().add(const Duration(hours: 3));
+    return (tarih: t.toIso8601String().substring(0, 10), gun: t.weekday);
+  }
+
+  /// Günlük bonus: Pazartesi 100, Salı 200 … Pazar 700; her gün bir kez.
+  static int bonusMiktari(int gun) => gun * 100;
+
+  Map<String, dynamic> bonusDurumu(int id) {
+    final r = _db.select('SELECT son_bonus FROM kullanicilar WHERE id = ?', [id]).first;
+    final b = _bugun();
+    return {'bonusHazir': r['son_bonus'] != b.tarih, 'bonusMiktar': bonusMiktari(b.gun), 'bonusGun': b.gun};
+  }
+
+  /// Bonusu verir; zaten alındıysa alindi=false.
+  Map<String, dynamic> bonusAl(int id) {
+    final b = _bugun();
+    final r = _db.select('SELECT son_bonus FROM kullanicilar WHERE id = ?', [id]).first;
+    if (r['son_bonus'] == b.tarih) return {'alindi': false, ...bonusDurumu(id), 'profil': profil(id)};
+    final m = bonusMiktari(b.gun);
+    _db.execute('UPDATE kullanicilar SET altin = altin + ?, son_bonus = ? WHERE id = ?', [m, b.tarih, id]);
+    return {'alindi': true, 'bonus': m, ...bonusDurumu(id), 'profil': profil(id)};
+  }
+
   Map<String, dynamic> profil(int id) {
     final r = _db.select('SELECT * FROM kullanicilar WHERE id = ?', [id]).first;
     final lv = levelHesapla(r['xp'] as int);
+    final b = _bugun();
     return {
+      'bonusHazir': r['son_bonus'] != b.tarih,
+      'bonusMiktar': bonusMiktari(b.gun),
+      'bonusGun': b.gun,
       'id': r['id'],
       'nick': r['nick'],
       'avatar': r['avatar'],

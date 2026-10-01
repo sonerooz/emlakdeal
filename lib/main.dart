@@ -91,6 +91,25 @@ class _MenuScreenState extends State<MenuScreen> {
                   ]),
                 ),
               ),
+              if (Hesap.o.girisli && Hesap.o.bonusHazir) ...[
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFFE0B13A), foregroundColor: Colors.black, textStyle: const TextStyle(fontWeight: FontWeight.w800)),
+                  onPressed: () async {
+                    final r = await Hesap.o.bonusAl();
+                    if (!context.mounted) return;
+                    setState(() {});
+                    final m = r == null
+                        ? 'Sunucuya ulaşılamadı.'
+                        : r['alindi'] == true
+                            ? '🎁 Günlük bonus: +${r['bonus']} altın!'
+                            : 'Bugünkü bonus zaten alınmış.';
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+                  },
+                  icon: const Icon(Icons.card_giftcard),
+                  label: Text('Günlük bonus: ${Hesap.o.bonusMiktar} altın'),
+                ),
+              ],
               const SizedBox(height: 40),
               const Text('Kaç bota karşı?', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
               const SizedBox(height: 10),
