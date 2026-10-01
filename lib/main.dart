@@ -171,7 +171,7 @@ class _KurallarDlg extends StatelessWidget {
             '• Ödeme banka + tapulardan yapılır, elden yapılmaz. Yetmiyorsa her şeyini verirsin.\n'
             '• Tapu Devri: tamamlanmamış setten tapu al. Değiş Tokuş: takas. Haciz: TAM seti al. Tahsilat: seçtiğin birinden 5M.\n'
             '• Reddet: sana oynanan hamleyi iptal eder (karşı taraf da Reddet ile karşılık verebilir).\n'
-            '• Ev (+3M) ve Otel (+4M) sadece tam setlere (Kocaeli / Mersin setleri hariç).\n'
+            '• Ev (+3M) ve Otel (+4M) sadece tam setlere (Ulaşım / Altyapı setleri hariç).\n'
             '• Joker tapular istediğin renkte sayılır; kendi turunda destede jokere dokunup rengini değiştirebilirsin.\n'
             '• Tur sonunda elinde en fazla 7 kart kalabilir.',
             style: TextStyle(height: 1.4),

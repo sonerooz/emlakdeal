@@ -86,8 +86,8 @@ extension PColorX on PColor {
         PColor.yellow: 'İzmir',
         PColor.green: 'Ankara',
         PColor.darkBlue: 'İstanbul',
-        PColor.railroad: 'Kocaeli',
-        PColor.utility: 'Mersin',
+        PColor.railroad: 'Ulaşım',
+        PColor.utility: 'Altyapı',
       }[this]!;
 
   /// Setteki tapu adları: o şehrin en büyük/bilinen ilçeleri (pahalıdan ucuza).
@@ -95,13 +95,13 @@ extension PColorX on PColor {
         PColor.brown: ['Şahinbey', 'Şehitkamil'],
         PColor.lightBlue: ['Seyhan', 'Çukurova', 'Yüreğir'],
         PColor.pink: ['Selçuklu', 'Meram', 'Karatay'],
-        PColor.orange: ['Muratpaşa', 'Konyaaltı', 'Kepez'],
-        PColor.red: ['Nilüfer', 'Osmangazi', 'Yıldırım'],
+        PColor.orange: ['Muratpaşa', 'Konyaaltı', 'Kaş'],
+        PColor.red: ['Nilüfer', 'Osmangazi', 'Gemlik'],
         PColor.yellow: ['Konak', 'Karşıyaka', 'Bornova'],
         PColor.green: ['Çankaya', 'Yenimahalle', 'Keçiören'],
-        PColor.darkBlue: ['Beşiktaş', 'Sarıyer'],
-        PColor.railroad: ['İzmit', 'Gebze', 'Darıca', 'Körfez'],
-        PColor.utility: ['Yenişehir', 'Mezitli'],
+        PColor.darkBlue: ['Beşiktaş', 'Kadıköy'],
+        PColor.railroad: ['Sabiha Gökçen Havalimanı', 'Esenboğa Havalimanı', 'Eskihisar Feribot İskelesi', 'Topçular Feribot İskelesi'],
+        PColor.utility: ['Doğalgaz İdaresi', 'Telekom Altyapısı'],
       }[this]!;
 }
 
