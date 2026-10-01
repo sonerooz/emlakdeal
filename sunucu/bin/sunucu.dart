@@ -35,6 +35,9 @@ class Koltuk {
   Baglanti? bag;
   Player? player;
   UzakKarar? karar;
+  /// Bağlantı koptu ve 30 sn içinde dönmedi: yerine bot oynar (dönerse geri alır).
+  bool botlasti = false;
+  Timer? kopmaSayaci;
 }
 
 class Oda {
@@ -49,6 +52,12 @@ class Oda {
   DateTime sozBitis = DateTime.now();
 
   bool get basladi => game != null;
+  static const kopmaSuresi = Duration(seconds: 30);
+
+  Koltuk? koltukOf(Player p) => koltuklar.where((k) => k.player == p).firstOrNull;
+
+  /// Sıradaki oyuncuyu sunucu mu oynatmalı? (gerçek bot ya da botlaşmış koltuk)
+  bool aktifBotMu(Game g) => g.aktif.isBot || (koltukOf(g.aktif)?.botlasti ?? false);
 
   List<Baglanti> get baglar => [for (final k in koltuklar) if (k.bag != null) k.bag!];
 
@@ -128,7 +137,7 @@ class Oda {
     if (g == null || botOynuyor) return;
     botOynuyor = true;
     try {
-      while (g.kazanan == null && g.aktif.isBot) {
+      while (g.kazanan == null && aktifBotMu(g)) {
         await bot.turOyna(g, g.aktif);
       }
     } catch (e, st) {
@@ -196,7 +205,7 @@ class Oda {
     }
     durumYayinla();
     bitisKontrol();
-    if (g.kazanan == null && g.aktif.isBot) unawaited(botKontrol());
+    if (g.kazanan == null && aktifBotMu(g)) unawaited(botKontrol());
   }
 }
 
@@ -300,9 +309,14 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
       final eski = oda.koltuklar.where((k) => k.bag == null && k.ad == b.ad).firstOrNull;
       if (eski != null) {
         eski.bag = b;
+        eski.kopmaSayaci?.cancel();
+        eski.kopmaSayaci = null;
+        final botIdi = eski.botlasti;
+        eski.botlasti = false;
         b.oda = oda;
         b.koltuk = eski;
         log('oda $kod: ${b.ad} geri döndü');
+        if (oda.basladi) oda.herkese({'t': 'bilgi', 'm': botIdi ? '${b.ad} geri döndü, yeniden kendisi oynuyor.' : '${b.ad} geri döndü.'});
         if (oda.basladi) {
           final g = oda.game!;
           b.gonder({'t': 'basladi', 'sen': g.players.indexOf(eski.player!), 'adlar': [for (final p in g.players) p.name], 'botlar': [for (final p in g.players) p.isBot]});
@@ -369,11 +383,22 @@ void kopti(Baglanti b) {
     if (oda.sahip == k) oda.sahip = oda.koltuklar.first;
     oda.lobiYayinla();
   } else {
-    // oyun sürüyor: kopan oyuncu yerine bot karar verir (geri dönerse devralır)
+    // oyun sürüyor: 30 sn geri dönüş süresi; dönmezse yerine bot oynar (dönerse devralır)
     if (oda.baglar.isEmpty) {
       odalar.remove(oda.kod);
       log('oda ${oda.kod} boşaldı, kapandı');
+      return;
     }
+    oda.herkese({'t': 'bilgi', 'm': '${k.ad} bağlantısı koptu, 30 sn bekleniyor…'});
+    k.kopmaSayaci?.cancel();
+    k.kopmaSayaci = Timer(Oda.kopmaSuresi, () {
+      if (k.bag != null || !odalar.containsKey(oda.kod)) return;
+      k.botlasti = true;
+      log('oda ${oda.kod}: ${k.ad} dönmedi, bot devraldı');
+      oda.herkese({'t': 'bilgi', 'm': '${k.ad} geri dönmedi, yerine bot oynuyor.'});
+      final g = oda.game;
+      if (g != null && g.kazanan == null && oda.aktifBotMu(g)) unawaited(oda.botKontrol());
+    });
   }
 }
 

@@ -140,6 +140,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _soruyaCevap(m);
       case 'hata':
         _mesaj(m['m'] as String? ?? 'Hata');
+      case 'bilgi':
+        _mesaj(m['m'] as String? ?? '');
       case 'bitti':
         _bitisKontrol();
     }
