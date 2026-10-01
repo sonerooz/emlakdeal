@@ -90,9 +90,9 @@ class Player {
     bank.remove(c);
     for (final k in props.keys.toList()) {
       props[k]!.remove(c);
-      if (props[k]!.isEmpty) {
-        props.remove(k);
-        // set bozulduysa binalar bankaya değil, discard'a gider (kural sadeleştirmesi: bankaya)
+      if (props[k]!.isEmpty) props.remove(k);
+      // Ev/otel yalnız TAM sette durabilir: set bozulursa (joker taşındı vb.) binalar para olarak bankaya iner.
+      if (!setTam(k)) {
         final b = binalar.remove(k);
         if (b != null) bank.addAll(b);
       }
