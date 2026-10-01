@@ -198,7 +198,7 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
       return Tooltip(
         message: '${p.name} masasına bak',
         child: InkWell(
-          onTap: () => oyuncuyaDon(p),
+          onTap: () => p == widget.ben ? sifirla() : oyuncuyaDon(p),
           borderRadius: BorderRadius.circular(20),
           child: Container(
             width: 36,
@@ -215,7 +215,6 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
       for (final p in g.players) oyuncu(p),
       const SizedBox(height: 4),
       b(Icons.vertical_align_top, 'Tepeden bak', tepeden),
-      b(Icons.center_focus_strong, 'Kamerayı sıfırla', sifirla),
     ]);
   }
 
