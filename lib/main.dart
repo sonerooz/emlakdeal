@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'ui/game_screen.dart';
 import 'ayarlar.dart';
 import 'basarimlar.dart';
+import 'hesap.dart';
+import 'ui/profil_ekrani.dart';
 import 'ui/ayarlar_ekrani.dart';
 import 'ui/basarimlar_ekrani.dart';
 import 'ui/lobi.dart';
@@ -12,6 +14,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Ayarlar.o.yukle();
   await BasarimDurumu.o.yukle();
+  await Hesap.o.yukle();
+  Hesap.o.baglan(); // arka planda; sunucu yoksa sessiz
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const MonoDealApp());
 }
@@ -39,6 +43,9 @@ class _MenuScreenState extends State<MenuScreen> {
   @override
   void initState() {
     super.initState();
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() {});
+    });
     if (!Ayarlar.o.ogreticiGoruldu) {
       WidgetsBinding.instance.addPostFrameCallback((_) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OgreticiEkrani())));
     }
@@ -65,6 +72,25 @@ class _MenuScreenState extends State<MenuScreen> {
               const Text('DEAL', style: TextStyle(color: Colors.amber, fontSize: 56, fontWeight: FontWeight.w900, letterSpacing: 8, height: 0.9)),
               const SizedBox(height: 12),
               const Text('Türkiye şehirleri tapu kart oyunu', style: TextStyle(color: Colors.white70, fontSize: 15)),
+              const SizedBox(height: 14),
+              InkWell(
+                onTap: () => _ac(const ProfilEkrani()),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.white24)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(Hesap.o.avatar, style: const TextStyle(fontSize: 26)),
+                    const SizedBox(width: 10),
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(Hesap.o.nick, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+                      Text('Seviye ${Hesap.o.level} · 💰 ${Hesap.o.altin}', style: const TextStyle(color: Colors.amber, fontSize: 12)),
+                    ]),
+                    const SizedBox(width: 10),
+                    const Icon(Icons.chevron_right, color: Colors.white54),
+                  ]),
+                ),
+              ),
               const SizedBox(height: 40),
               const Text('Kaç bota karşı?', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
               const SizedBox(height: 10),

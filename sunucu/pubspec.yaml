@@ -1,9 +1,11 @@
 name: monodeal_sunucu
-description: Monopoly Deal LAN/online sunucusu (WebSocket, oyun motoru hakem).
+description: Emlak Deal online sunucusu (WebSocket, oyun motoru hakem).
 version: 1.0.0
 publish_to: none
 environment:
   sdk: ^3.5.0
 dependencies:
+  sqlite3: ^3.7.0
+  crypto: ^3.0.6
   monodeal_cekirdek:
     path: ../cekirdek

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../ayarlar.dart';
+import '../hesap.dart';
 import '../net/istemci.dart';
 import 'game_screen.dart';
 
@@ -88,6 +89,8 @@ class _LobiEkraniState extends State<LobiEkrani> {
             benIdx: m['sen'] as int,
             adlar: (m['adlar'] as List).cast<String>(),
             botlar: (m['botlar'] as List).cast<bool>(),
+            avatarlar: (m['avatarlar'] as List?)?.cast<String>() ?? const [],
+            leveller: (m['leveller'] as List?)?.cast<int>() ?? const [],
           ),
         ));
     }
@@ -112,7 +115,7 @@ class _LobiEkraniState extends State<LobiEkrani> {
             const SizedBox(height: 8),
             FilledButton.icon(
               style: FilledButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
-              onPressed: _mesgul ? null : () => _baglan({'t': 'kur', 'ad': _ad.text, 'bot': _bot}),
+              onPressed: _mesgul ? null : () => _baglan({'t': 'kur', 'ad': _ad.text, 'bot': _bot, 'token': Hesap.o.token}),
               icon: const Icon(Icons.add_home),
               label: const Text('Oda kur'),
             ),
@@ -128,7 +131,7 @@ class _LobiEkraniState extends State<LobiEkrani> {
             const SizedBox(height: 8),
             OutlinedButton.icon(
               style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
-              onPressed: _mesgul ? null : () => _baglan({'t': 'katil', 'ad': _ad.text, 'oda': _kod.text}),
+              onPressed: _mesgul ? null : () => _baglan({'t': 'katil', 'ad': _ad.text, 'oda': _kod.text, 'token': Hesap.o.token}),
               icon: const Icon(Icons.login),
               label: const Text('Katıl'),
             ),
@@ -143,8 +146,8 @@ class _LobiEkraniState extends State<LobiEkrani> {
             const SizedBox(height: 20),
             for (final o in (oda['oyuncular'] as List))
               ListTile(
-                leading: Icon(Icons.person, color: (o['bagli'] as bool) ? Colors.white : Colors.white30),
-                title: Text(o['ad'] as String, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                leading: Text((o['avatar'] as String?) ?? '🙂', style: TextStyle(fontSize: 26, color: (o['bagli'] as bool) ? null : Colors.white30)),
+                title: Text('${o['ad']}  ·  Sv ${o['level'] ?? 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                 subtitle: o['ad'] == oda['sahip'] ? const Text('Oda sahibi', style: TextStyle(color: Colors.amber, fontSize: 12)) : null,
                 trailing: (o['hazir'] as bool? ?? false)
                     ? const Icon(Icons.check_circle, color: Colors.greenAccent)

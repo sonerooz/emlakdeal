@@ -2,7 +2,7 @@ import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import '../model/cards.dart';
 
-/// Tek kart görseli — orijinal Monopoly Deal kartlarına yakın dil:
+/// Tek kart görseli — fiziksel kart oyunlarına yakın dil:
 /// renkli başlık bandı, sol üstte değer rozeti, ortada büyük simge, altta kısa açıklama.
 /// [w] genişlik; yükseklik 1.45×.
 class CardView extends StatelessWidget {
@@ -427,7 +427,7 @@ class CardBack extends StatelessWidget {
           height: w * 0.7 * 1.45,
           decoration: BoxDecoration(border: Border.all(color: Colors.white38), borderRadius: BorderRadius.circular(w * 0.06)),
           alignment: Alignment.center,
-          child: Text('MD', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w900, fontSize: w / 3.5)),
+          child: Text('ED', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w900, fontSize: w / 3.5)),
         ),
       );
 }

@@ -28,6 +28,7 @@ class Table3D extends StatefulWidget {
     required this.discardKey,
     required this.handKeys,
     required this.tableKey,
+    this.profiller = const {},
     this.ucanlar = const [],
     this.ustBilgi,
   });
@@ -40,6 +41,8 @@ class Table3D extends StatefulWidget {
   final Map<Player, GlobalKey> handKeys;
   /// Masa kutusunun anahtarı; koordinat dönüşümleri için (RenderBox = 1100×1100 düzlem).
   final GlobalKey tableKey;
+  /// Oyuncu → (avatar, level); rozetlerde gösterilir.
+  final Map<Player, (String, int)> profiller;
   /// Masa düzleminde hareket eden kartlar.
   final List<MasaUcus> ucanlar;
   /// Masanın üstüne bindirilen durum şeridi.
@@ -364,9 +367,9 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(color: aktif ? Colors.amber : Colors.black54, borderRadius: BorderRadius.circular(20)),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(ben ? Icons.person : Icons.smart_toy, size: 16, color: aktif ? Colors.black : Colors.white70),
+                    Text(widget.profiller[p]?.$1 ?? (p.isBot ? '🤖' : '🙂'), style: const TextStyle(fontSize: 16)),
                     const SizedBox(width: 6),
-                    Text(p.name, style: TextStyle(color: aktif ? Colors.black : Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
+                    Text('${p.name} · Sv ${widget.profiller[p]?.$2 ?? 1}', style: TextStyle(color: aktif ? Colors.black : Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
                     const SizedBox(width: 8),
                     Text('set ${p.tamSetSayisi}/3 · ${p.bankaToplam}M', style: TextStyle(color: aktif ? Colors.black87 : Colors.white70, fontSize: 11)),
                     if (!ben) ...[

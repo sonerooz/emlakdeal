@@ -13,12 +13,16 @@ import 'package:monodeal_cekirdek/aktarim.dart';
 import 'dart:io';
 import '../ayarlar.dart';
 import '../basarimlar.dart';
+import '../hesap.dart';
+import 'package:monodeal_cekirdek/seviye.dart';
 import '../net/istemci.dart';
 import 'dialogs.dart';
 import 'table_3d.dart';
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, this.botSayisi = 1, this.net, this.benIdx = 0, this.adlar = const [], this.botlar = const [], this.kayit});
+  const GameScreen({super.key, this.botSayisi = 1, this.net, this.benIdx = 0, this.adlar = const [], this.botlar = const [], this.avatarlar = const [], this.leveller = const [], this.kayit});
+  final List<String> avatarlar;
+  final List<int> leveller;
   /// Kaydedilmiş tek kişilik oyun (devam et).
   final Map<String, dynamic>? kayit;
   final int botSayisi; // 1..4 (yerel oyun)
@@ -86,6 +90,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   int _benimTurum = 0;
   int _sonSira = -1;
   late final HumanDecider _insan = HumanDecider(() => context);
+  final Map<Player, (String, int)> _profiller = {};
+  Map<String, dynamic>? _odul;
 
   @override
   void initState() {
@@ -98,17 +104,31 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ben = oy[widget.benIdx];
       botlar = [for (final p in oy) if (p != ben) p];
       game = Game(players: oy);
+      for (var i = 0; i < oy.length; i++) {
+        _profiller[oy[i]] = (i < widget.avatarlar.length ? widget.avatarlar[i] : (oy[i].isBot ? '🤖' : '🙂'), i < widget.leveller.length ? widget.leveller[i] : 1);
+      }
     } else if (widget.kayit != null) {
       final oy = widget.kayit!['oyuncular'] as List;
       ben = Player((oy[0] as Map)['ad'] as String, isBot: false, decider: _insan);
       botlar = [for (var i = 1; i < oy.length; i++) Player((oy[i] as Map)['ad'] as String, isBot: true, decider: _botAi)];
       game = Game(players: [ben, ...botlar]);
+      final rng = Random();
+      for (final b in botlar) {
+        _profiller[b] = (avatarlar[rng.nextInt(avatarlar.length)], 1 + rng.nextInt(12));
+      }
     } else {
-      ben = Player(Ayarlar.o.ad, isBot: false, decider: _insan);
+      ben = Player(Hesap.o.nick, isBot: false, decider: _insan);
       final n = widget.botSayisi.clamp(1, 4);
-      botlar = [for (var i = 1; i <= n; i++) Player(n == 1 ? 'Bot' : 'Bot $i', isBot: true, decider: _botAi)];
+      final rng = Random();
+      final adlar = List.of(botAdlari)..shuffle(rng);
+      adlar.removeWhere((a) => a.toLowerCase() == Hesap.o.nick.toLowerCase());
+      botlar = [for (var i = 0; i < n; i++) Player(adlar[i], isBot: true, decider: _botAi)];
       game = Game(players: [ben, ...botlar]);
+      for (final b in botlar) {
+        _profiller[b] = (avatarlar[rng.nextInt(avatarlar.length)], 1 + rng.nextInt(12));
+      }
     }
+    _profiller[ben] = (Hesap.o.avatar, Hesap.o.level);
     for (final b in botlar) {
       _kBotEl[b] = GlobalKey();
       _kBotSet[b] = GlobalKey();
@@ -221,6 +241,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _mesaj(m['m'] as String? ?? '');
       case 'sohbet':
         _sohbetGoster(game.players[m['kim'] as int], m['soz'] as String);
+      case 'odul':
+        _odul = m;
+        Hesap.o.odulGeldi(m);
+        if (mounted) setState(() {});
       case 'bitti':
         _bitisKontrol();
     }
@@ -597,7 +621,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (!_online) a.kayitYaz(null);
     final oran = a.oynanan == 0 ? 0 : (a.kazanilan * 100 / a.oynanan).round();
     final sira = [...game.players]..sort((x, y) => y.varlikToplam.compareTo(x.varlikToplam));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    Future.delayed(Duration(milliseconds: _online ? 1200 : 1500), () {
+      if (!mounted) return;
+      final o = _odul;
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -609,6 +635,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             for (final p in sira)
               Text('${p == k ? '🏆 ' : ''}${p.name}: ${p.tamSetSayisi} tam set · ${p.varlikToplam}M varlık', style: TextStyle(fontWeight: p == ben ? FontWeight.w700 : FontWeight.w400)),
             const SizedBox(height: 12),
+            if (o != null)
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: const Color(0xFFFFF3C4), borderRadius: BorderRadius.circular(8)),
+                child: Text('+${o['xp']} XP  ·  +${o['altin']} altın${o['levelAtladi'] == true ? '  ·  🎉 Seviye ${o['level']}!' : '  ·  Seviye ${o['level']}'}', style: const TextStyle(fontWeight: FontWeight.w800)),
+              ),
             Text('Toplam: ${a.oynanan} oyun, ${a.kazanilan} galibiyet (%$oran)', style: const TextStyle(fontSize: 12, color: Colors.black54)),
           ]),
           actions: [
@@ -659,8 +691,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-  /// Botla oynanan oyunun sonucunu liderlik tablosuna gönderir (sunucu erişilebilirse).
+  /// Botla oynanan oyunun sonucu: XP/altın (hesap sunucusu) + eski liderlik dosyası.
   Future<void> _sonucGonder(bool kazandim) async {
+    final r = await Hesap.o.sonuc(kazandi: kazandim, rakip: botlar.length, zorluk: Ayarlar.o.botZorluk, basarimlar: BasarimDurumu.o.acik.toList());
+    if (r != null && mounted) setState(() => _odul = r);
     try {
       final adres = '${Ayarlar.o.sunucu.replaceFirst('wss://', 'https://').replaceFirst('ws://', 'http://')}/sonuc';
       final c = HttpClient()..connectionTimeout = const Duration(seconds: 5);
@@ -1009,6 +1043,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     discardKey: _kMerkez,
                     handKeys: _kBotEl,
                     tableKey: _kMasa,
+                    profiller: _profiller,
                     ucanlar: _masaUcanlar,
                     ustBilgi: _durumSeridi(durum),
                   ),
