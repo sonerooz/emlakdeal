@@ -54,11 +54,13 @@ class Player {
   int get tamSetSayisi => tamSetler.length;
 
   /// Tüm ödenebilir varlıklar (banka + mülkler + binalar).
+  /// Ödemede kullanılabilecek kartlar. Çok renkli jokerin para değeri yoktur (resmi kural):
+  /// ödeme olarak verilemez ve varlık toplamına girmez.
   List<GameCard> get varliklar => [
         ...bank,
         for (final l in props.values) ...l,
         for (final l in binalar.values) ...l,
-      ];
+      ].where((c) => c.paraDegeri > 0).toList();
 
   int get varlikToplam => varliklar.fold(0, (s, c) => s + c.paraDegeri);
 
