@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:flutter_tts/flutter_tts.dart';
 import '../ai/bot.dart';
 import '../model/cards.dart';
 import '../model/game.dart';
@@ -70,7 +69,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   final _kMasa = GlobalKey();
   String? _banner;
   Player? _konusan;
-  final FlutterTts _tts = FlutterTts();
   final AudioPlayer _klip = AudioPlayer();
   final AudioPlayer _sohbetKlip = AudioPlayer();
   final AudioPlayer _muzik = AudioPlayer();
@@ -81,9 +79,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   int _sohbetNo = 0;
   Map<String, dynamic> _klipler = const {};
   bool _sesli = Ayarlar.o.sesli;
-  bool _ttsHazir = false;
-  final Map<Player, Map<String, String>> _sesler = {};
-  final Map<Player, double> _perde = {};
 
   bool get _online => widget.net != null;
   StreamSubscription? _netAbone;
@@ -141,7 +136,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     game.animator = _animasyon;
     game.sozcu = _konus;
     game.sozBekle = _sozBekle;
-    _ttsKur();
     _klipleriYukle();
     kartArkasiStili = Hesap.o.kartArkasi;
     _muzikBaslat();
@@ -301,7 +295,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    _tts.stop();
     _klip.dispose();
     _sohbetKlip.dispose();
     _muzik.dispose();
@@ -346,33 +339,6 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-  Future<void> _ttsKur() async {
-    try {
-      await _tts.setLanguage('tr-TR');
-      await _tts.setSpeechRate(0.5);
-      await _tts.awaitSpeakCompletion(true);
-      final sesler = <Map<String, String>>[];
-      try {
-        final v = await _tts.getVoices;
-        if (v is List) {
-          for (final e in v) {
-            if (e is Map && '${e['locale']}'.toLowerCase().startsWith('tr')) {
-              sesler.add({'name': '${e['name']}', 'locale': '${e['locale']}'});
-            }
-          }
-        }
-      } catch (_) {}
-      // Her oyuncuya farklı ses; ses yoksa perde ile ayır.
-      const perdeler = [1.0, 0.8, 1.25, 0.9, 1.1];
-      for (var i = 0; i < game.players.length; i++) {
-        final p = game.players[i];
-        _perde[p] = perdeler[i % perdeler.length];
-        if (sesler.isNotEmpty) _sesler[p] = sesler[i % sesler.length];
-      }
-      _ttsHazir = true;
-    } catch (_) {}
-  }
-
   Future<void> _sonSoz = Future.value();
   int _sozSayac = 0;
 
@@ -389,21 +355,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   Future<void> _sozBekle() => _sonSoz;
 
-  /// Klip varsa onu, yoksa cihaz TTS'ini çalar; ses kapalıysa okuma süresi kadar bekler.
+  /// Klip varsa çalar; yoksa (robotik cihaz sesi kullanılmaz) okuma süresi kadar sessiz bekler.
   Future<void> _sesCal(Player p, String soz, {AudioPlayer? oynatici}) async {
     final klip = _klipAdi(p, soz);
     if (_sesli && klip != null && await _klipCal(klip, oynatici: oynatici)) return;
-    if (_sesli && _ttsHazir) {
-      try {
-        final v = _sesler[p];
-        if (v != null) await _tts.setVoice(v);
-        await _tts.setPitch(_perde[p] ?? 1.0);
-        await _tts.speak(soz.replaceAllMapped(RegExp(r'(\d+)M'), (m) => '${m[1]} milyon')).timeout(const Duration(seconds: 8));
-      } catch (_) {
-        await Future.delayed(const Duration(milliseconds: 900));
-      }
-      return;
-    }
     await Future.delayed(Duration(milliseconds: 500 + soz.length * 35));
   }
 
@@ -1090,8 +1045,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   Ayarlar.o.sesli = _sesli;
                   Ayarlar.o.kaydet();
                   if (!_sesli) {
-                    _tts.stop();
-                    _klip.stop();
+                                    _klip.stop();
                   }
                 }),
                 icon: Icon(_sesli ? Icons.record_voice_over : Icons.voice_over_off),
