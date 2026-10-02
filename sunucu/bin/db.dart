@@ -238,6 +238,8 @@ class Db {
     return t;
   }
 
+  void oturumKapat(String token) => _db.execute('DELETE FROM oturumlar WHERE token = ?', [token]);
+
   int? oturumKim(String? token) {
     if (token == null || token.isEmpty) return null;
     final r = _db.select('SELECT kullanici_id FROM oturumlar WHERE token = ?', [token]);

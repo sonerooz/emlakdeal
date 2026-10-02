@@ -646,6 +646,44 @@ Future<void> main(List<String> args) async {
   await _dinle(server);
 }
 
+final _girisHatalari = <String, List<DateTime>>{};
+final _googleIstemci = Platform.environment['EMLAKDEAL_GOOGLE_CLIENT_ID'] ?? '';
+final _facebookUygulama = Platform.environment['EMLAKDEAL_FACEBOOK_APP_ID'] ?? '';
+
+Future<Map<String, dynamic>?> _jsonGet(String url) async {
+  final c = HttpClient()..connectionTimeout = const Duration(seconds: 6);
+  try {
+    final y = await (await c.getUrl(Uri.parse(url))).close().timeout(const Duration(seconds: 10));
+    final j = jsonDecode(await y.transform(utf8.decoder).join());
+    return y.statusCode == 200 && j is Map ? j.cast<String, dynamic>() : null;
+  } catch (_) {
+    return null;
+  } finally {
+    c.close(force: true);
+  }
+}
+
+/// Sağlayıcının verdiği token'ı sağlayıcıya sorarak doğrular; kimlik (sub / user id) döner.
+Future<({String? kimlik, String? ad, String? hata})> _sosyalDogrula(String saglayici, String token) async {
+  if (token.isEmpty) return (kimlik: null, ad: null, hata: 'Token yok.');
+  if (saglayici == 'google') {
+    if (_googleIstemci.isEmpty) return (kimlik: null, ad: null, hata: 'yapılandırılmadı: Google girişi sunucuda henüz ayarlanmadı.');
+    final j = await _jsonGet('https://oauth2.googleapis.com/tokeninfo?id_token=${Uri.encodeQueryComponent(token)}');
+    if (j == null || j['aud'] != _googleIstemci || j['sub'] == null) return (kimlik: null, ad: null, hata: 'Google girişi doğrulanamadı.');
+    return (kimlik: '${j['sub']}', ad: (j['given_name'] ?? j['name']) as String?, hata: null);
+  }
+  if (saglayici == 'facebook') {
+    if (_facebookUygulama.isEmpty) return (kimlik: null, ad: null, hata: 'yapılandırılmadı: Facebook girişi sunucuda henüz ayarlanmadı.');
+    final t = Uri.encodeQueryComponent(token);
+    final app = await _jsonGet('https://graph.facebook.com/app?access_token=$t');
+    if (app == null || '${app['id']}' != _facebookUygulama) return (kimlik: null, ad: null, hata: 'Facebook girişi doğrulanamadı.');
+    final me = await _jsonGet('https://graph.facebook.com/me?fields=id,first_name&access_token=$t');
+    if (me == null || me['id'] == null) return (kimlik: null, ad: null, hata: 'Facebook girişi doğrulanamadı.');
+    return (kimlik: '${me['id']}', ad: me['first_name'] as String?, hata: null);
+  }
+  return (kimlik: null, ad: null, hata: 'Bilinmeyen sağlayıcı.');
+}
+
 /// JSON API: misafir/giriş/profil/sonuç/liderlik. Yetki: Authorization: Bearer <token>.
 Future<void> _api(HttpRequest req) async {
   Map<String, dynamic> govde = {};
@@ -673,12 +711,27 @@ Future<void> _api(HttpRequest req) async {
         final r = db.misafir(cihaz, nick: govde['nick'] as String?, avatar: govde['avatar'] as String?);
         return yaz(200, {'token': r.token, 'yeni': r.yeni, 'profil': db.profil(r.id)});
       case '/api/giris':
-        final r = db.epostaGiris((govde['eposta'] as String? ?? '').trim(), govde['sifre'] as String? ?? '');
-        if (r == null) return yaz(401, {'hata': 'E-posta ya da şifre yanlış.'});
+        final ep = (govde['eposta'] as String? ?? '').trim().toLowerCase();
+        final simdi = DateTime.now();
+        final denemeler = (_girisHatalari[ep] ?? []).where((t) => simdi.difference(t).inMinutes < 10).toList();
+        if (denemeler.length >= 8) return yaz(429, {'hata': 'Çok fazla yanlış deneme. 10 dakika sonra tekrar dene.'});
+        final r = db.epostaGiris(ep, govde['sifre'] as String? ?? '');
+        if (r == null) {
+          _girisHatalari[ep] = [...denemeler, simdi];
+          return yaz(401, {'hata': 'E-posta ya da şifre yanlış.'});
+        }
+        _girisHatalari.remove(ep);
         return yaz(200, {'token': r.token, 'profil': db.profil(r.id)});
       case '/api/sosyal':
-        // İleride: sağlayıcı token'ı doğrulanıp kimlik çıkarılacak (google/facebook/apple).
-        return yaz(501, {'hata': 'Sosyal giriş henüz etkin değil.'});
+        final sag = govde['saglayici'] as String? ?? '';
+        final k = await _sosyalDogrula(sag, govde['token'] as String? ?? '');
+        if (k.hata != null) return yaz(k.hata!.startsWith('yapılandırılmadı') ? 501 : 401, {'hata': k.hata});
+        final onceki = kim;
+        final r = db.sosyal(sag, k.kimlik!, bagla: onceki, nick: k.ad);
+        return yaz(200, {'token': r.token, 'degisti': onceki != null && r.id != onceki, 'profil': db.profil(r.id)});
+      case '/api/cikis':
+        if (token != null) db.oturumKapat(token);
+        return yaz(200, {'tamam': true});
       case '/api/profil':
         if (kim == null) return yaz(401, {'hata': 'oturum yok'});
         if (req.method == 'POST') {

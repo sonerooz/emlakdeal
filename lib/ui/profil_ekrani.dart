@@ -52,7 +52,53 @@ class _ProfilEkraniState extends State<ProfilEkrani> {
     }
   }
 
+  Future<bool> _onay(String baslik, String metin) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text(baslik),
+          content: Text(metin),
+          actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Vazgeç')), FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Devam'))],
+        ),
+      ) ??
+      false;
+
+  Future<void> _cikis() async {
+    if (!await _onay('Çıkış yapılsın mı?', 'Bu cihazda yeni bir misafir hesapla başlarsın. Bağlı hesabına tekrar girince ilerlemen geri gelir.')) return;
+    setState(() => _mesgul = true);
+    await h.cikis();
+    if (mounted) {
+      setState(() {
+        _mesgul = false;
+        _mesaj = 'Çıkış yapıldı.';
+        _nick.text = h.nick;
+        _avatar = h.avatar;
+        _eposta.clear();
+        _sifre.clear();
+      });
+    }
+  }
+
+  Future<void> _sosyalGiris(String saglayici, String ad) async {
+    setState(() {
+      _mesgul = true;
+      _mesaj = null;
+    });
+    final r = await h.sosyalGiris(saglayici);
+    if (mounted) {
+      setState(() {
+        _mesgul = false;
+        _mesaj = r.hata ?? (r.degisti ? '$ad hesabına geçildi; önceki ilerlemen geri geldi.' : '$ad hesaba bağlandı.');
+        _nick.text = h.nick;
+        _avatar = h.avatar;
+      });
+    }
+  }
+
   Future<void> _epostaGiris() async {
+    if (!h.baglandi && ((h.profil?['oyun'] as int?) ?? 0) > 0) {
+      if (!await _onay('Hesap değişecek', 'Bu cihazdaki misafir hesabın (Seviye ${h.level}) bağlı olmadığı için bırakılır. Devam edilsin mi?')) return;
+    }
     setState(() => _mesgul = true);
     final hata = await h.epostaGiris(_eposta.text.trim(), _sifre.text);
     if (mounted) {
@@ -139,13 +185,60 @@ class _ProfilEkraniState extends State<ProfilEkrani> {
           Text('Toplam XP: ${p['xp']}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
           const SizedBox(height: 24),
         ],
-        const Text('Hesabı güvenceye al', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 4),
-        Text(
-          p?['eposta'] != null ? 'Bağlı e-posta: ${p!['eposta']}' : 'E-posta ve şifre ekle; telefon değişince aynı hesaba girersin. Google / Facebook / Apple ile giriş yakında.',
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
-        ),
-        const SizedBox(height: 8),
+        if (h.baglandi) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.25), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.6))),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('✅ Hesabın güvende', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.w800, fontSize: 16)),
+              const SizedBox(height: 4),
+              Text('Telefon değişse bile aynı yöntemle girince ilerlemen geri gelir.', style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12)),
+              const SizedBox(height: 8),
+              if (p?['eposta'] != null) Text('📧 ${p!['eposta']}', style: const TextStyle(color: Colors.white)),
+              if (p?['google'] == true) const Text('🔵 Google bağlı', style: TextStyle(color: Colors.white)),
+              if (p?['facebook'] == true) const Text('🔷 Facebook bağlı', style: TextStyle(color: Colors.white)),
+            ]),
+          ),
+          const SizedBox(height: 10),
+          if (p?['google'] != true || p?['facebook'] != true) _sosyalSatir(),
+          if (p?['eposta'] == null) ...[const SizedBox(height: 8), _epostaFormu(girisVar: false)],
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent, side: const BorderSide(color: Colors.redAccent)),
+            onPressed: _mesgul ? null : _cikis,
+            icon: const Icon(Icons.logout),
+            label: const Text('Çıkış yap / başka hesaba geç'),
+          ),
+        ] else ...[
+          const Text('Hesabı güvenceye al', style: TextStyle(color: Colors.amber, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text('Şu an bu cihaza bağlı misafir hesabındasın; uygulamayı silersen ilerlemen gider. Bir yöntemle bağla.', style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12)),
+          const SizedBox(height: 10),
+          _sosyalSatir(),
+          const SizedBox(height: 10),
+          _epostaFormu(girisVar: true),
+        ],
+      ]),
+    );
+  }
+
+  Widget _sosyalSatir() {
+    final p = h.profil;
+    return Row(children: [
+      Expanded(child: _sosyal('Google', Icons.g_mobiledata, 'google', p?['google'] == true)),
+      const SizedBox(width: 8),
+      Expanded(child: _sosyal('Facebook', Icons.facebook, 'facebook', p?['facebook'] == true)),
+    ]);
+  }
+
+  Widget _sosyal(String ad, IconData ik, String saglayici, bool bagli) => OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(foregroundColor: bagli ? Colors.greenAccent : Colors.white, side: BorderSide(color: bagli ? Colors.greenAccent : Colors.white54)),
+        onPressed: _mesgul || bagli ? null : () => _sosyalGiris(saglayici, ad),
+        icon: Icon(bagli ? Icons.check_circle : ik),
+        label: Text(bagli ? '$ad bağlı' : '$ad ile bağlan', style: const TextStyle(fontSize: 12)),
+      );
+
+  Widget _epostaFormu({required bool girisVar}) => Column(children: [
         TextField(controller: _eposta, keyboardType: TextInputType.emailAddress, style: const TextStyle(color: Colors.white), decoration: _dec('E-posta')),
         const SizedBox(height: 8),
         TextField(controller: _sifre, obscureText: true, style: const TextStyle(color: Colors.white), decoration: _dec('Şifre (en az 6)')),
@@ -155,38 +248,21 @@ class _ProfilEkraniState extends State<ProfilEkrani> {
             child: OutlinedButton(
               style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
               onPressed: _mesgul ? null : _epostaBagla,
-              child: const Text('Bu hesaba bağla'),
+              child: const Text('E-postayı bu hesaba bağla', textAlign: TextAlign.center),
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
-              onPressed: _mesgul ? null : _epostaGiris,
-              child: const Text('Giriş yap'),
+          if (girisVar) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.white, side: const BorderSide(color: Colors.white54)),
+                onPressed: _mesgul ? null : _epostaGiris,
+                child: const Text('Mevcut hesaba giriş yap', textAlign: TextAlign.center),
+              ),
             ),
-          ),
+          ],
         ]),
-        const SizedBox(height: 16),
-        Row(children: [
-          _sosyal('Google', Icons.g_mobiledata),
-          const SizedBox(width: 8),
-          _sosyal('Facebook', Icons.facebook),
-          const SizedBox(width: 8),
-          _sosyal('Apple', Icons.apple),
-        ]),
-      ]),
-    );
-  }
-
-  Widget _sosyal(String ad, IconData ik) => Expanded(
-        child: OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(foregroundColor: Colors.white38, side: const BorderSide(color: Colors.white24)),
-          onPressed: null,
-          icon: Icon(ik),
-          label: Text(ad, style: const TextStyle(fontSize: 12)),
-        ),
-      );
+      ]);
 
   InputDecoration _dec(String l) => InputDecoration(
         labelText: l,

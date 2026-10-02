@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'ayarlar.dart';
+import 'sosyal_ayar.dart';
 
 /// Üyelik: cihaz anahtarıyla misafir hesap, oturum token'ı, profil (nick/avatar/XP/level/altın).
 /// Google/Facebook/Apple girişleri sunucuda "hesabı bağla" olarak eklenecek.
@@ -129,6 +132,61 @@ class Hesap {
     } on HesapHatasi catch (e) {
       return e.mesaj;
     }
+  }
+
+  bool get baglandi => profil?['eposta'] != null || profil?['google'] == true || profil?['facebook'] == true;
+
+  /// Google/Facebook ile bağlan. Başka hesaba geçilirse degisti true. Hata metni ya da null.
+  Future<({String? hata, bool degisti})> sosyalGiris(String saglayici) async {
+    try {
+      String? t;
+      if (saglayici == 'google') {
+        if (googleSunucuIstemci.isEmpty) return (hata: 'Google girişi henüz ayarlanmadı.', degisti: false);
+        final g = GoogleSignIn(serverClientId: googleSunucuIstemci, scopes: ['email']);
+        await g.signOut();
+        t = (await (await g.signIn())?.authentication)?.idToken;
+        if (t == null) return (hata: 'Google girişi iptal edildi.', degisti: false);
+      } else {
+        if (facebookUygulamaKimligi.isEmpty) return (hata: 'Facebook girişi henüz ayarlanmadı.', degisti: false);
+        final r = await FacebookAuth.instance.login(permissions: ['public_profile']);
+        t = r.accessToken?.tokenString;
+        if (t == null) return (hata: 'Facebook girişi iptal edildi.', degisti: false);
+      }
+      final r = await _istek('/api/sosyal', govde: {'saglayici': saglayici, 'token': t});
+      final degisti = r['degisti'] == true;
+      if (degisti) {
+        token = r['token'] as String;
+        await _p?.setString('token', token!);
+      }
+      await _profilKaydet(Map<String, dynamic>.from(r['profil'] as Map));
+      Ayarlar.o.ad = nick;
+      await Ayarlar.o.kaydet();
+      return (hata: null, degisti: degisti);
+    } on HesapHatasi catch (e) {
+      return (hata: e.mesaj, degisti: false);
+    } catch (e) {
+      return (hata: 'Giriş yapılamadı: $e', degisti: false);
+    }
+  }
+
+  /// Oturumu kapat; bu cihazda yepyeni bir misafir hesapla devam eder.
+  Future<void> cikis() async {
+    try {
+      await _istek('/api/cikis', govde: {});
+    } catch (_) {}
+    try {
+      await GoogleSignIn().signOut();
+      await FacebookAuth.instance.logOut();
+    } catch (_) {}
+    token = null;
+    profil = null;
+    await _p?.remove('token');
+    await _p?.remove('profil');
+    final r = Random.secure();
+    cihaz = base64Url.encode(List<int>.generate(24, (_) => r.nextInt(256)));
+    await _p?.setString('cihaz', cihaz);
+    Ayarlar.o.ad = 'Oyuncu';
+    await baglan();
   }
 
   /// Botla oynanan oyunun sonucu → XP/altın. Döner: {xp, altin, level, levelAtladi} ya da null.
