@@ -365,7 +365,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   // ----------------------------------------------------------- sohbet / emoji
   static const sohbetSozleri = ['Kahretsin!', 'Sen görürsün!', 'Bir dahaki sefere.', 'Bunun intikamı acı olur!', 'İyi oyundu!', 'Hahaha!',
       'Şans işte.', 'Bravo!', 'Acele et biraz!', 'Teşekkürler.', 'Buna inanamıyorum!', 'Pes ediyorum.'];
-  static const sohbetEmojileri = ['😂', '😡', '😎', '👏', '🙏', '🤔', '😱', '🔥', '❤️', '🤝'];
+  static const sohbetEmojileri = ['😂', '😡', '😎', '👏', '🙏', '🤔', '😱', '🔥', '❤️', '🤝', '🐘'];
 
   bool _emojiMi(String s) => sohbetEmojileri.contains(s);
 
