@@ -199,7 +199,7 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
         );
     Widget oyuncu(Player p) {
       final aktif = g.aktif == p;
-      final ad = p == widget.ben ? 'Sen' : p.name.replaceAll('Bot ', 'B');
+      final ad = p == widget.ben ? 'Sen' : gorunenAd(p.name).replaceAll('Bot ', 'B');
       return Tooltip(
         message: '${p.name} masasına bak',
         child: InkWell(
@@ -425,3 +425,5 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
     );
   }
 }
+
+String gorunenAd(String n) => n.trim().toLowerCase() == 'sen' ? 'Rakip' : n;

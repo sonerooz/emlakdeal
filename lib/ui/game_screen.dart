@@ -400,7 +400,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 reverse: true,
                 children: [
                   for (final (p, m) in _sohbetGecmis.reversed.take(12))
-                    Text('${p == ben ? 'Sen' : p.name}: $m', style: TextStyle(color: p == ben ? Colors.amber : Colors.white70, fontSize: 13)),
+                    Text('${p == ben ? 'Sen' : gorunenAd(p.name)}: $m', style: TextStyle(color: p == ben ? Colors.amber : Colors.white70, fontSize: 13)),
                 ],
               ),
             ),
@@ -572,7 +572,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (!mounted) return;
     if (_acikDeste != null) setState(() => _acikDeste = null);
     final kim = e.kim;
-    final adim = kim == ben ? 'Sen' : kim?.name ?? '';
+    final adim = kim == ben ? 'Sen' : gorunenAd(kim?.name ?? '');
     Offset elM(Player p) => _masaNokta(p == ben ? _kBenEl : _kBotEl[p]);
     Offset setM(Player p) => _masaNokta(p == ben ? _kBenSet : _kBotSet[p]);
     Offset bankaM(Player p) => _masaNokta(p == ben ? _kBenBanka : _kBotSet[p]);
@@ -1106,7 +1106,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 8, offset: Offset(0, 3))],
                       ),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
-                        Text(_sohbetBalon!.$1 == ben ? 'Sen' : _sohbetBalon!.$1.name, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.black54)),
+                        Text(_sohbetBalon!.$1 == ben ? 'Sen' : gorunenAd(_sohbetBalon!.$1.name), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.black54)),
                         Text(_sohbetBalon!.$2, style: TextStyle(fontSize: _emojiMi(_sohbetBalon!.$2) ? 40 : 15, fontWeight: FontWeight.w700, color: Colors.black87)),
                       ]),
                     ),
@@ -1128,7 +1128,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         ),
                         child: Column(mainAxisSize: MainAxisSize.min, children: [
                           if (_konusan != null)
-                            Text(_konusan == ben ? 'Sen' : _konusan!.name, style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.w800)),
+                            Text(_konusan == ben ? 'Sen' : gorunenAd(_konusan!.name), style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.w800)),
                           Text(_banner!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
                         ]),
                       ),

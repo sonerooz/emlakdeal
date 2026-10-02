@@ -579,7 +579,7 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
     return (id: id, ad: p['nick'] as String, avatar: p['avatar'] as String, level: p['level'] as int);
   }
   final ad = (m['ad'] as String?)?.trim().isNotEmpty == true ? (m['ad'] as String).trim() : 'Oyuncu';
-  return (id: null, ad: ad, avatar: '🙂', level: 1);
+  return (id: null, ad: ad.toLowerCase() == 'sen' ? 'Oyuncu' : ad, avatar: '🙂', level: 1);
 }
 
 void kopti(Baglanti b) {
