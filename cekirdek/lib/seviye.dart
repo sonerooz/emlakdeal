@@ -41,4 +41,4 @@ int levelEsigi(int level) => level >= maxLevel ? 0 : level * 100 + fib(level < 1
 
 /// Bot takma adları (nick göstermek için).
 const botAdlari = ['Kerem', 'Elif', 'Can', 'Zeynep', 'Mert', 'Defne', 'Emre', 'Nehir', 'Burak', 'Ece', 'Deniz', 'Selin', 'Arda', 'Lara', 'Kaan', 'Mina'];
-const avatarlar = ['🦊', '🐻', '🐼', '🦁', '🐯', '🐸', '🐵', '🦄', '🐙', '🦉', '🐧', '🐨', '🐲', '🦋', '🐺', '🦩'];
+const avatarlar = ['🦊', '🐻', '🐼', '🦁', '🐯', '🐸', '🐵', '🦄', '🐙', '🦉', '🐧', '🐨', '🐲', '🦋', '🐺', '🦩', '🐘'];
