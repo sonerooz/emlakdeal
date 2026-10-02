@@ -145,7 +145,9 @@ class Game extends Bildirici {
   Future<void> Function()? sozBekle;
 
   /// Süren konuşma bitmeden yeni hamleye geçilmez.
-  Future<void> _sozBitsin() async {
+  /// Bot hamleleri önceki konuşmanın bitmesini bekler; insan oyuncu ardışık hamlelerde bekletilmez.
+  Future<void> _sozBitsin([Player? p]) async {
+    if (p != null && !p.isBot) return;
     final b = sozBekle;
     if (b != null) await b();
   }
@@ -237,7 +239,7 @@ class Game extends Bildirici {
       }
       _log('${p.name} ${at.length} kart attı.');
     }
-    await _sozBitsin();
+    await _sozBitsin(p);
     current = (current + 1) % players.length;
     await turBaslat();
   }
@@ -280,7 +282,7 @@ class Game extends Bildirici {
 
   Future<bool> _mulkOyna(Player p, GameCard c) async {
     if (!_oynayabilir() || !c.isProperty || !p.hand.contains(c)) return false;
-    await _sozBitsin();
+    await _sozBitsin(p);
     PColor renk;
     if (c.kind == CardKind.property) {
       renk = c.color!;
@@ -300,7 +302,7 @@ class Game extends Bildirici {
   /// Oynanmış joker mülkün rengini değiştir (ücretsiz, kendi turunda).
   Future<bool> jokerRengiDegistir(Player p, GameCard c) async {
     if (!c.isWild || kazanan != null) return false;
-    await _sozBitsin();
+    await _sozBitsin(p);
     final eski = c.wildColor;
     final sec = c.isMultiWild ? PColor.values : c.colors;
     final yeni = await p.decider.jokerRengi(this, p, c, sec);
@@ -317,7 +319,7 @@ class Game extends Bildirici {
 
   Future<bool> _bankayaKoy(Player p, GameCard c) async {
     if (!_oynayabilir() || c.isProperty || !p.hand.contains(c)) return false;
-    await _sozBitsin();
+    await _sozBitsin(p);
     await _soyle(p, c.isMoney ? '${c.paraDegeri}M bankaya.' : 'Hamle kartını ${c.paraDegeri}M olarak bankaya koyuyorum.');
     await _anim(GameEvent(EvTip.banka, c, kim: p));
     p.hand.remove(c);
@@ -465,7 +467,7 @@ class Game extends Bildirici {
 
   Future<bool> _passGo(Player p, GameCard c) async {
     if (!_oynayabilir() || c.action != ActionType.passGo) return false;
-    await _sozBitsin();
+    await _sozBitsin(p);
     await _soyle(p, 'İki kart çekiyorum.');
     await _aksiyonuAt(p, c);
     await _cekEle(p, 2);
@@ -478,7 +480,7 @@ class Game extends Bildirici {
 
   Future<bool> _tahsilat(Player p, GameCard c, Player r) async {
     if (!_oynayabilir() || c.action != ActionType.tahsilat || r == p) return false;
-    await _sozBitsin();
+    await _sozBitsin(p);
     await _soyle(p, 'Senden 5M tahsil ediyorum.');
     await _aksiyonuAt(p, c);
     _log('${p.name} Tahsilat: ${r.name} 5M ödemeli.');
@@ -491,7 +493,7 @@ class Game extends Bildirici {
 
   Future<bool> _dogumGunu(Player p, GameCard c) async {
     if (!_oynayabilir() || c.action != ActionType.birthday) return false;
-    await _sozBitsin();
+    await _sozBitsin(p);
     await _soyle(p, 'Bugün doğum günüm! Herkesten 2M istiyorum.');
     await _aksiyonuAt(p, c);
     _log('${p.name} Doğum Günüm: herkes 2M veriyor.');
@@ -507,7 +509,7 @@ class Game extends Bildirici {
 
   Future<bool> _kiraOyna(Player p, GameCard c, PColor renk, {GameCard? cift}) async {
     if (!_oynayabilir() || !c.isRent) return false;
-    await _sozBitsin();
+    await _sozBitsin(p);
     if (!c.isWildRent && !c.rentColors.contains(renk)) return false;
     if (p.propsOf(renk).isEmpty) return false;
     if (cift != null && (playsLeft < 2 || cift.action != ActionType.doubleRent)) return false;
@@ -534,7 +536,7 @@ class Game extends Bildirici {
 
   Future<bool> _slyDeal(Player p, GameCard c, GameCard hedefMulk) async {
     if (!_oynayabilir() || c.action != ActionType.slyDeal) return false;
-    await _sozBitsin();
+    await _sozBitsin(p);
     final r = sahibi(hedefMulk);
     if (r == null || r == p || !calinabilir(r).contains(hedefMulk)) return false;
     await _soyle(p, hedefMulk.isWild ? 'Joker tapuyu alıyorum.' : '${hedefMulk.etkinRenk!.ad} tapu alıyorum.');
@@ -555,7 +557,7 @@ class Game extends Bildirici {
 
   Future<bool> _forcedDeal(Player p, GameCard c, GameCard benimki, GameCard onunki) async {
     if (!_oynayabilir() || c.action != ActionType.forcedDeal) return false;
-    await _sozBitsin();
+    await _sozBitsin(p);
     final r = sahibi(onunki);
     if (r == null || r == p || !calinabilir(r).contains(onunki) || !calinabilir(p).contains(benimki)) return false;
     await _soyle(p, 'Tapu takası yapıyorum.');
@@ -579,7 +581,7 @@ class Game extends Bildirici {
 
   Future<bool> _dealBreaker(Player p, GameCard c, Player r, PColor set) async {
     if (!_oynayabilir() || c.action != ActionType.dealBreaker || r == p) return false;
-    await _sozBitsin();
+    await _sozBitsin(p);
     if (!r.setTam(set)) return false;
     await _soyle(p, '${set.ad} tapu setini haciz ediyorum!');
     await _aksiyonuAt(p, c);
@@ -608,7 +610,7 @@ class Game extends Bildirici {
 
   Future<bool> _binaKoy(Player p, GameCard c, PColor set) async {
     if (!_oynayabilir()) return false;
-    await _sozBitsin();
+    await _sozBitsin(p);
     if (c.action != ActionType.house && c.action != ActionType.hotel) return false;
     if (!p.setTam(set) || !set.binaOlur) return false;
     final mevcut = p.binalar[set] ?? const <GameCard>[];

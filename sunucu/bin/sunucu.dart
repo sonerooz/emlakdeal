@@ -213,7 +213,8 @@ class Oda {
     g.animator = (e) async {
       herkese({'t': 'olay', 'o': olayJson(g, e)});
       // istemciler kendi animasyonlarını oynatırken sunucu kısa bekler
-      await Future.delayed(Duration(milliseconds: e.tip == EvTip.aksiyon ? 1500 : 550));
+      final insan = e.kim != null && !e.kim!.isBot;
+      await Future.delayed(Duration(milliseconds: e.tip == EvTip.aksiyon ? (insan ? 900 : 1500) : (insan ? 350 : 550)));
     };
     g.sozcu = (p, soz) async {
       herkese({'t': 'soz', 'kim': players.indexOf(p), 'soz': soz});
