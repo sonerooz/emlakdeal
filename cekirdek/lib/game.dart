@@ -242,6 +242,21 @@ class Game extends Bildirici {
     await turBaslat();
   }
 
+  /// Hamle sürerken (konuşma/animasyon beklemesi) aynı karta gelen tekrar dokunuşlar reddedilir;
+  /// aksi halde kart elden en sonda çıktığı için aynı kart defalarca oynanabiliyordu.
+  final Set<int> _islenenKartlar = {};
+
+  Future<bool> _kilitli(List<GameCard> kartlar, Future<bool> Function() is_) async {
+    if (kartlar.any((k) => _islenenKartlar.contains(k.id))) return false;
+    final ids = [for (final k in kartlar) k.id];
+    _islenenKartlar.addAll(ids);
+    try {
+      return await is_();
+    } finally {
+      _islenenKartlar.removeAll(ids);
+    }
+  }
+
   bool _oynayabilir() => playsLeft > 0 && kazanan == null;
 
   void _harca([int n = 1]) {
@@ -261,7 +276,9 @@ class Game extends Bildirici {
   }
 
   // ----------------------------------------------------------- basit oynayışlar
-  Future<bool> mulkOyna(Player p, GameCard c) async {
+  Future<bool> mulkOyna(Player p, GameCard c) => _kilitli([c], () => _mulkOyna(p, c));
+
+  Future<bool> _mulkOyna(Player p, GameCard c) async {
     if (!_oynayabilir() || !c.isProperty || !p.hand.contains(c)) return false;
     await _sozBitsin();
     PColor renk;
@@ -296,7 +313,9 @@ class Game extends Bildirici {
     return true;
   }
 
-  Future<bool> bankayaKoy(Player p, GameCard c) async {
+  Future<bool> bankayaKoy(Player p, GameCard c) => _kilitli([c], () => _bankayaKoy(p, c));
+
+  Future<bool> _bankayaKoy(Player p, GameCard c) async {
     if (!_oynayabilir() || c.isProperty || !p.hand.contains(c)) return false;
     await _sozBitsin();
     await _soyle(p, c.isMoney ? '${c.paraDegeri}M bankaya.' : 'Hamle kartını ${c.paraDegeri}M olarak bankaya koyuyorum.');
@@ -442,7 +461,9 @@ class Game extends Bildirici {
     notifyListeners();
   }
 
-  Future<bool> passGo(Player p, GameCard c) async {
+  Future<bool> passGo(Player p, GameCard c) => _kilitli([c], () => _passGo(p, c));
+
+  Future<bool> _passGo(Player p, GameCard c) async {
     if (!_oynayabilir() || c.action != ActionType.passGo) return false;
     await _sozBitsin();
     await _soyle(p, 'İki kart çekiyorum.');
@@ -453,7 +474,9 @@ class Game extends Bildirici {
     return true;
   }
 
-  Future<bool> tahsilat(Player p, GameCard c, Player r) async {
+  Future<bool> tahsilat(Player p, GameCard c, Player r) => _kilitli([c], () => _tahsilat(p, c, r));
+
+  Future<bool> _tahsilat(Player p, GameCard c, Player r) async {
     if (!_oynayabilir() || c.action != ActionType.tahsilat || r == p) return false;
     await _sozBitsin();
     await _soyle(p, 'Senden 5M tahsil ediyorum.');
@@ -464,7 +487,9 @@ class Game extends Bildirici {
     return true;
   }
 
-  Future<bool> dogumGunu(Player p, GameCard c) async {
+  Future<bool> dogumGunu(Player p, GameCard c) => _kilitli([c], () => _dogumGunu(p, c));
+
+  Future<bool> _dogumGunu(Player p, GameCard c) async {
     if (!_oynayabilir() || c.action != ActionType.birthday) return false;
     await _sozBitsin();
     await _soyle(p, 'Bugün doğum günüm! Herkesten 2M istiyorum.');
@@ -478,7 +503,9 @@ class Game extends Bildirici {
   }
 
   /// Kira: [renk] için rakipten kira al. [cift] verilirse Çift Kira kartı da harcanır.
-  Future<bool> kiraOyna(Player p, GameCard c, PColor renk, {GameCard? cift}) async {
+  Future<bool> kiraOyna(Player p, GameCard c, PColor renk, {GameCard? cift}) => _kilitli([c, if (cift != null) cift], () => _kiraOyna(p, c, renk, cift: cift));
+
+  Future<bool> _kiraOyna(Player p, GameCard c, PColor renk, {GameCard? cift}) async {
     if (!_oynayabilir() || !c.isRent) return false;
     await _sozBitsin();
     if (!c.isWildRent && !c.rentColors.contains(renk)) return false;
@@ -503,7 +530,9 @@ class Game extends Bildirici {
           if (!r.setTam(e.key)) ...e.value,
       ];
 
-  Future<bool> slyDeal(Player p, GameCard c, GameCard hedefMulk) async {
+  Future<bool> slyDeal(Player p, GameCard c, GameCard hedefMulk) => _kilitli([c, hedefMulk], () => _slyDeal(p, c, hedefMulk));
+
+  Future<bool> _slyDeal(Player p, GameCard c, GameCard hedefMulk) async {
     if (!_oynayabilir() || c.action != ActionType.slyDeal) return false;
     await _sozBitsin();
     final r = sahibi(hedefMulk);
@@ -522,7 +551,9 @@ class Game extends Bildirici {
     return true;
   }
 
-  Future<bool> forcedDeal(Player p, GameCard c, GameCard benimki, GameCard onunki) async {
+  Future<bool> forcedDeal(Player p, GameCard c, GameCard benimki, GameCard onunki) => _kilitli([c, benimki, onunki], () => _forcedDeal(p, c, benimki, onunki));
+
+  Future<bool> _forcedDeal(Player p, GameCard c, GameCard benimki, GameCard onunki) async {
     if (!_oynayabilir() || c.action != ActionType.forcedDeal) return false;
     await _sozBitsin();
     final r = sahibi(onunki);
@@ -544,7 +575,9 @@ class Game extends Bildirici {
     return true;
   }
 
-  Future<bool> dealBreaker(Player p, GameCard c, Player r, PColor set) async {
+  Future<bool> dealBreaker(Player p, GameCard c, Player r, PColor set) => _kilitli([c], () => _dealBreaker(p, c, r, set));
+
+  Future<bool> _dealBreaker(Player p, GameCard c, Player r, PColor set) async {
     if (!_oynayabilir() || c.action != ActionType.dealBreaker || r == p) return false;
     await _sozBitsin();
     if (!r.setTam(set)) return false;
@@ -571,7 +604,9 @@ class Game extends Bildirici {
   }
 
   /// Ev/otel: tam bir sete koy.
-  Future<bool> binaKoy(Player p, GameCard c, PColor set) async {
+  Future<bool> binaKoy(Player p, GameCard c, PColor set) => _kilitli([c], () => _binaKoy(p, c, set));
+
+  Future<bool> _binaKoy(Player p, GameCard c, PColor set) async {
     if (!_oynayabilir()) return false;
     await _sozBitsin();
     if (c.action != ActionType.house && c.action != ActionType.hotel) return false;

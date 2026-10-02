@@ -786,7 +786,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   // ----------------------------------------------------------- kart tıklama
+  final Map<int, DateTime> _sonTik = {};
+
   Future<void> _kartTikla(GameCard c) async {
+    final simdi = DateTime.now();
+    final onceki = _sonTik[c.id];
+    if (onceki != null && simdi.difference(onceki) < const Duration(milliseconds: 1500)) return;
+    _sonTik[c.id] = simdi;
     if (!_sirada) return _mesaj('Sıra sende değil.');
     if (game.playsLeft <= 0) return _mesaj('Hamle hakkın bitti.');
     if (c.isProperty || c.isMoney) {
