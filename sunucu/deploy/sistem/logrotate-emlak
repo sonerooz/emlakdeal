@@ -1,0 +1,9 @@
+# /etc/logrotate.d/emlak  (yalnız cron kullanıyorsan ve Docker'sız çalışıyorsan gerekli;
+# Docker logları compose içinde max-size/max-file ile zaten döner, journald de kendi sınırını uygular)
+/var/log/emlak-*.log {
+    weekly
+    rotate 8
+    compress
+    missingok
+    notifempty
+}

@@ -1,3 +1,4 @@
+import 'dart:math';
 /// Level/XP/altın kuralları (uygulama ve sunucu ortak).
 ///
 /// Level L'den L+1'e geçiş eşiği: L*100 + fib(min(L,12))*10, fib(1)=1, fib(2)=2, fib(3)=3, fib(4)=5…
@@ -42,3 +43,25 @@ int levelEsigi(int level) => level >= maxLevel ? 0 : level * 100 + fib(level < 1
 /// Bot takma adları (nick göstermek için).
 const botAdlari = ['Kerem', 'Elif', 'Can', 'Zeynep', 'Mert', 'Defne', 'Emre', 'Nehir', 'Burak', 'Ece', 'Deniz', 'Selin', 'Arda', 'Lara', 'Kaan', 'Mina'];
 const avatarlar = ['🦊', '🐻', '🐼', '🦁', '🐯', '🐸', '🐵', '🦄', '🐙', '🦉', '🐧', '🐨', '🐲', '🦋', '🐺', '🦩', '🐘'];
+
+/// Oyun içi sesler: 0,2,4 erkek; 1,3,5 kadın (klip dosyalarındaki ses sırası).
+const sesAdlari = ['Orus', 'Kore', 'Puck', 'Leda', 'Charon', 'Aoede'];
+const sesTanimlari = ['kararlı', 'kararlı', 'neşeli', 'genç', 'ağırbaşlı', 'hafif'];
+bool sesKadin(int s) => s.isOdd;
+const kadinBotAdlari = {'Elif', 'Zeynep', 'Defne', 'Nehir', 'Ece', 'Selin', 'Lara', 'Mina'};
+bool kadinAdi(String ad) => kadinBotAdlari.contains(ad);
+
+/// Bot adlarının cinsiyetine göre ses atar; önce insan seslerinden ve birbirinden farklı olanı seçer.
+List<int> botSesleri(List<String> adlar, Iterable<int> insanSesleri, [Random? rng]) {
+  final r = rng ?? Random();
+  final kullanilan = {...insanSesleri};
+  final sonuc = <int>[];
+  for (final ad in adlar) {
+    final kadin = kadinAdi(ad);
+    final havuz = [for (var s = 0; s < sesAdlari.length; s++) if (sesKadin(s) == kadin) s]..shuffle(r);
+    final secilen = havuz.firstWhere((s) => !kullanilan.contains(s), orElse: () => havuz.first);
+    kullanilan.add(secilen);
+    sonuc.add(secilen);
+  }
+  return sonuc;
+}

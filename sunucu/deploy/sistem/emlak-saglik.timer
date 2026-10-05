@@ -1,0 +1,7 @@
+[Unit]
+Description=Emlak Deal sağlık kontrolü (dakikada bir)
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,22 @@
+# ALAN_ADI ve ACME_EPOSTA compose üzerinden ortam değişkeni olarak gelir.
+{
+	email {$ACME_EPOSTA}
+}
+
+{$ALAN_ADI} {
+	encode zstd gzip
+	# WebSocket (Upgrade) başlıkları reverse_proxy tarafından otomatik geçirilir.
+	reverse_proxy sunucu:8765 {
+		health_uri /saglik
+		health_interval 30s
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+	log {
+		output stdout
+		format console
+	}
+}

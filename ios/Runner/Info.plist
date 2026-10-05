@@ -24,6 +24,36 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>FacebookAppID</key>
+	<string>4633869850195321</string>
+	<key>FacebookClientToken</key>
+	<string>dc41dbf23cae7eb0d491e56c397f04e4</string>
+	<key>FacebookDisplayName</key>
+	<string>Emlak Deal</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>fb4633869850195321</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.359307791628-949mjg7d2m9itg342f8gr2q58jur5rr2</string>
+			</array>
+		</dict>
+	</array>
+	<key>GIDClientID</key>
+	<string>359307791628-949mjg7d2m9itg342f8gr2q58jur5rr2.apps.googleusercontent.com</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>fbapi</string>
+		<string>fb-messenger-share-api</string>
+		<string>fbauth2</string>
+		<string>fbshareextension</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

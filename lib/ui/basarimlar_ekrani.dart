@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../ayarlar.dart';
+import '../dil.dart';
 import '../basarimlar.dart';
 import '../hesap.dart';
 
@@ -26,7 +27,7 @@ class _BasarimlarEkraniState extends State<BasarimlarEkrani> with SingleTickerPr
       final l = await Hesap.o.liderlik();
       if (mounted) setState(() => _lider = l);
     } catch (e) {
-      if (mounted) setState(() => _hata = 'Sunucuya ulaşılamadı.');
+      if (mounted) setState(() => _hata = t('Sunucuya ulaşılamadı.'));
     }
   }
 
@@ -38,10 +39,10 @@ class _BasarimlarEkraniState extends State<BasarimlarEkrani> with SingleTickerPr
       appBar: AppBar(
         backgroundColor: const Color(0xFF0F3D25),
         foregroundColor: Colors.white,
-        title: const Text('Başarımlar'),
+        title: Text(t('Başarımlar')),
         bottom: TabBar(controller: _tab, indicatorColor: Colors.amber, labelColor: Colors.amber, unselectedLabelColor: Colors.white70, tabs: [
-          Tab(text: 'Rozetler ${d.acik.length}/${basarimlar.length}'),
-          const Tab(text: 'Liderlik'),
+          Tab(text: t('Rozetler {a}/{b}', {'a': d.acik.length, 'b': basarimlar.length})),
+          Tab(text: t('Liderlik')),
         ]),
       ),
       body: TabBarView(controller: _tab, children: [
@@ -58,12 +59,12 @@ class _BasarimlarEkraniState extends State<BasarimlarEkrani> with SingleTickerPr
             ),
           Padding(
             padding: const EdgeInsets.all(12),
-            child: Text('Seri: ${d.seri} galibiyet · Toplam ${Ayarlar.o.oynanan} oyun, ${Ayarlar.o.kazanilan} galibiyet',
+            child: Text(t('Seri: {seri} galibiyet · Toplam {oyun} oyun, {gal} galibiyet', {'seri': d.seri, 'oyun': Ayarlar.o.oynanan, 'gal': Ayarlar.o.kazanilan}),
                 textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54, fontSize: 12)),
           ),
         ]),
         _lider == null
-            ? Center(child: _hata != null ? Text(_hata!, style: const TextStyle(color: Colors.white70)) : const CircularProgressIndicator(color: Colors.amber))
+            ? Center(child: _hata != null ? Text(sunucuMesaj(_hata!), style: const TextStyle(color: Colors.white70)) : const CircularProgressIndicator(color: Colors.amber))
             : RefreshIndicator(
                 onRefresh: _liderlikYukle,
                 child: ListView.builder(
@@ -74,8 +75,8 @@ class _BasarimlarEkraniState extends State<BasarimlarEkrani> with SingleTickerPr
                     final ben = e['nick'] == Hesap.o.nick;
                     return ListTile(
                       leading: Text(i < 3 ? ['🥇', '🥈', '🥉'][i] : '${i + 1}.', style: TextStyle(color: Colors.white, fontSize: i < 3 ? 24 : 16, fontWeight: FontWeight.w800)),
-                      title: Text('${e['avatar'] ?? ''} ${e['nick']}  ·  Sv ${e['level']}', style: TextStyle(color: ben ? Colors.amber : Colors.white, fontWeight: FontWeight.w800)),
-                      subtitle: Text('${e['xp']} XP · ${e['galibiyet']} galibiyet / ${e['oyun']} oyun${(e['onlineGalibiyet'] ?? 0) > 0 ? ' · ${e['onlineGalibiyet']} online' : ''}', style: const TextStyle(color: Colors.white70)),
+                      title: Text('${e['avatar'] ?? ''} ${e['nick']}  ·  ${t('Sv')} ${e['level']}', style: TextStyle(color: ben ? Colors.amber : Colors.white, fontWeight: FontWeight.w800)),
+                      subtitle: Text('${t('{xp} XP · {gal} galibiyet / {oyun} oyun', {'xp': e['xp'], 'gal': e['galibiyet'], 'oyun': e['oyun']})}${(e['onlineGalibiyet'] ?? 0) > 0 ? ' · ${t('{n} online', {'n': e['onlineGalibiyet']})}' : ''}', style: const TextStyle(color: Colors.white70)),
                     );
                   },
                 ),

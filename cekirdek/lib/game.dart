@@ -10,7 +10,8 @@ abstract class Decider {
   Future<List<GameCard>> ode(Game g, Player me, int tutar, Player alacakli);
 
   /// Joker mülk için renk seç.
-  Future<PColor> jokerRengi(Game g, Player me, GameCard joker, List<PColor> secenekler);
+  /// null = oyuncu vazgeçti.
+  Future<PColor?> jokerRengi(Game g, Player me, GameCard joker, List<PColor> secenekler);
 
   /// Tur sonunda el 7'yi aşıyorsa atılacak kartları seç.
   Future<List<GameCard>> atilacaklar(Game g, Player me, int adet);
@@ -84,6 +85,8 @@ class Player {
     props.putIfAbsent(renk, () => []).add(c);
   }
 
+  static int _binaParaId = 2000000; // binadan dönüşen para kartları için benzersiz id
+
   /// Kartı nerede olursa olsun çıkarır (el/banka/mülk/bina).
   void kartiCikar(GameCard c) {
     hand.remove(c);
@@ -94,7 +97,11 @@ class Player {
       // Ev/otel yalnız TAM sette durabilir: set bozulursa (joker taşındı vb.) binalar para olarak bankaya iner.
       if (!setTam(k)) {
         final b = binalar.remove(k);
-        if (b != null) bank.addAll(b);
+        if (b != null) {
+          for (final x in b) {
+            bank.add(GameCard.para(_binaParaId++, x.paraDegeri));
+          }
+        }
       }
     }
     for (final k in binalar.keys.toList()) {
@@ -179,7 +186,7 @@ class Game extends Bildirici {
   /// Bir masadaki kartın sahibi (mülk/bina/banka).
   Player? sahibi(GameCard c) {
     for (final p in players) {
-      if (p.varliklar.contains(c)) return p;
+      if (p.bank.contains(c) || p.props.values.any((l) => l.contains(c)) || p.binalar.values.any((l) => l.contains(c))) return p;
     }
     return null;
   }
@@ -221,6 +228,7 @@ class Game extends Bildirici {
   }
 
   Future<void> turBaslat() async {
+    if (kazanan != null) return;
     final p = aktif;
     playsLeft = 3;
     turBasladi = true;
@@ -229,7 +237,8 @@ class Game extends Bildirici {
   }
 
   /// Tur sonu: el 7'yi aşıyorsa at, sıradakine geç.
-  Future<void> turBitir() async {
+  Future<void> turBitir({bool sureDoldu = false}) async {
+    if (kazanan != null) return;
     final p = aktif;
     if (p.hand.length > 7) {
       final at = await p.decider.atilacaklar(this, p, p.hand.length - 7);
@@ -241,6 +250,7 @@ class Game extends Bildirici {
     }
     await _sozBitsin(p);
     current = (current + 1) % players.length;
+    if (sureDoldu) await _soyle(aktif, 'Süren bitti, sıra bende!');
     await turBaslat();
   }
 
@@ -288,7 +298,9 @@ class Game extends Bildirici {
       renk = c.color!;
     } else {
       final sec = c.isMultiWild ? PColor.values : c.colors;
-      renk = await p.decider.jokerRengi(this, p, c, sec);
+      final secilen = await p.decider.jokerRengi(this, p, c, sec);
+      if (secilen == null) return false;
+      renk = secilen;
     }
     await _soyle(p, c.isWild ? 'Jokeri ${renk.ad} setine koyuyorum.' : '${renk.ad} tapu masaya.');
     await _anim(GameEvent(EvTip.mulk, c, kim: p, renk: renk));
@@ -306,7 +318,7 @@ class Game extends Bildirici {
     final eski = c.wildColor;
     final sec = c.isMultiWild ? PColor.values : c.colors;
     final yeni = await p.decider.jokerRengi(this, p, c, sec);
-    if (yeni == eski) return false;
+    if (yeni == null || yeni == eski) return false;
     p.kartiCikar(c);
     p.mulkEkle(c, yeni);
     _log('${p.name} jokeri ${yeni.ad} setine taşıdı.');
@@ -355,6 +367,8 @@ class Game extends Bildirici {
       toplam += c.paraDegeri;
       if (c.isProperty) {
         alacakli.mulkEkle(c, c.etkinRenk ?? c.colors.first);
+      } else if (c.action == ActionType.house || c.action == ActionType.hotel) {
+        alacakli.bank.add(GameCard.para(paraId++, c.paraDegeri));
       } else {
         alacakli.bank.add(c);
       }
@@ -422,6 +436,8 @@ class Game extends Bildirici {
       toplam += c.paraDegeri;
       if (c.isProperty) {
         alacakli.mulkEkle(c, c.etkinRenk ?? c.colors.first);
+      } else if (c.action == ActionType.house || c.action == ActionType.hotel) {
+        alacakli.bank.add(GameCard.para(paraId++, c.paraDegeri));
       } else {
         alacakli.bank.add(c);
       }
@@ -483,8 +499,8 @@ class Game extends Bildirici {
     await _sozBitsin(p);
     await _soyle(p, 'Senden 5M tahsil ediyorum.');
     await _aksiyonuAt(p, c);
-    _log('${p.name} Tahsilat: ${r.name} 5M ödemeli.');
-    await _talep(p, r, 5, 'Tahsilat (5M)', 'Tahsilat');
+    _log('${p.name} İcra Takibi: ${r.name} 5M ödemeli.');
+    await _talep(p, r, 5, 'İcra Takibi (5M)', 'İcra Takibi');
     _harca();
     return true;
   }
@@ -496,15 +512,15 @@ class Game extends Bildirici {
     await _sozBitsin(p);
     await _soyle(p, 'Bugün doğum günüm! Herkesten 2M istiyorum.');
     await _aksiyonuAt(p, c);
-    _log('${p.name} Doğum Günüm: herkes 2M veriyor.');
+    _log('${p.name} Ev Partisi: herkes 2M veriyor.');
     for (final r in players.where((x) => x != p)) {
-      await _talep(p, r, 2, 'Doğum Günüm (2M)', 'Doğum Günü');
+      await _talep(p, r, 2, 'Ev Partisi (2M)', 'Ev Partisi');
     }
     _harca();
     return true;
   }
 
-  /// Kira: [renk] için rakipten kira al. [cift] verilirse Çift Kira kartı da harcanır.
+  /// Kira: [renk] için rakipten kira al. [cift] verilirse Zam Geldi kartı da harcanır.
   Future<bool> kiraOyna(Player p, GameCard c, PColor renk, {GameCard? cift}) => _kilitli([c, if (cift != null) cift], () => _kiraOyna(p, c, renk, cift: cift));
 
   Future<bool> _kiraOyna(Player p, GameCard c, PColor renk, {GameCard? cift}) async {
@@ -517,7 +533,7 @@ class Game extends Bildirici {
     if (cift != null) await _soyle(p, 'Çift kira!');
     await _soyle(p, '${renk.ad} setinden ${tutar}M kira istiyorum.');
     await _aksiyonuAt(p, c);
-    if (cift != null) await _aksiyonuAt(p, cift, 'Çift Kira');
+    if (cift != null) await _aksiyonuAt(p, cift, 'Zam Geldi');
     _log('${p.name} ${renk.ad} kirası: ${tutar}M${cift != null ? ' (çift)' : ''} — herkes öder.');
     for (final r in rakipler(p)) {
       await _talep(p, r, tutar, '${renk.ad} kirası (${tutar}M)', 'kira');
@@ -562,11 +578,11 @@ class Game extends Bildirici {
     if (r == null || r == p || !calinabilir(r).contains(onunki) || !calinabilir(p).contains(benimki)) return false;
     await _soyle(p, 'Tapu takası yapıyorum.');
     await _aksiyonuAt(p, c);
-    _log('${p.name} Değiş Tokuş: ${benimki.ad} ↔ ${onunki.ad}.');
-    if (!await _jsnZinciri(p, r, 'Değiş Tokuş (${onunki.ad})')) {
+    _log('${p.name} Takas Pazarlığı: ${benimki.ad} ↔ ${onunki.ad}.');
+    if (!await _jsnZinciri(p, r, 'Takas Pazarlığı (${onunki.ad})')) {
       final rb = benimki.etkinRenk!, ro = onunki.etkinRenk!;
-      await _anim(GameEvent(EvTip.transfer, onunki, kim: r, kime: p, etiket: 'Değiş Tokuş'));
-      await _anim(GameEvent(EvTip.transfer, benimki, kim: p, kime: r, etiket: 'Değiş Tokuş'));
+      await _anim(GameEvent(EvTip.transfer, onunki, kim: r, kime: p, etiket: 'Takas Pazarlığı'));
+      await _anim(GameEvent(EvTip.transfer, benimki, kim: p, kime: r, etiket: 'Takas Pazarlığı'));
       p.kartiCikar(benimki);
       r.kartiCikar(onunki);
       p.mulkEkle(onunki, ro);

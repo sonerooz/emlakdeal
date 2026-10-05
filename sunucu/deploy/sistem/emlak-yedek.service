@@ -1,0 +1,5 @@
+[Unit]
+Description=Emlak Deal DB yedeği
+[Service]
+Type=oneshot
+ExecStart=/opt/emlakdeal-deploy/backup.sh

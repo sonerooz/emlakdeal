@@ -9,3 +9,5 @@ dependencies:
   crypto: ^3.0.6
   emlakdeal_cekirdek:
     path: ../cekirdek
+dev_dependencies:
+  test: ^1.32.0

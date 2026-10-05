@@ -1,0 +1,3 @@
+# systemd timer yerine cron tercih edersen: crontab -e (root)
+30 3 * * *  /opt/emlakdeal-deploy/backup.sh      >> /var/log/emlak-yedek.log  2>&1
+*  * * * *  /opt/emlakdeal-deploy/healthcheck.sh >> /var/log/emlak-saglik.log 2>&1

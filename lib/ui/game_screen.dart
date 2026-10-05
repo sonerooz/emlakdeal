@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show rootBundle, SystemChrome, SystemUiMode;
 import '../ai/bot.dart';
 import '../model/cards.dart';
 import '../model/game.dart';
@@ -11,18 +11,28 @@ import 'card_widget.dart';
 import 'package:emlakdeal_cekirdek/aktarim.dart';
 import 'dart:io';
 import '../ayarlar.dart';
+import '../dil.dart';
+import '../dil/soz.dart' show sozEn;
+import '../ses_servis.dart';
 import '../basarimlar.dart';
 import '../hesap.dart';
 import '../izleme.dart';
 import 'package:emlakdeal_cekirdek/seviye.dart';
 import '../net/istemci.dart';
 import 'dialogs.dart';
+import 'guvenlik.dart';
 import 'table_3d.dart';
+import 'sayac.dart';
+import 'konfeti.dart';
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, this.botSayisi = 1, this.net, this.benIdx = 0, this.adlar = const [], this.botlar = const [], this.avatarlar = const [], this.leveller = const [], this.kayit});
+  const GameScreen({super.key, this.botSayisi = 1, this.net, this.benIdx = 0, this.adlar = const [], this.botlar = const [], this.avatarlar = const [], this.leveller = const [], this.sesler = const [], this.kayit, this.bahis = 0, this.havuz = 0});
+  /// Bahisli online oda: kişi başı bahis ve toplam havuz (altın).
+  final int bahis;
+  final int havuz;
   final List<String> avatarlar;
   final List<int> leveller;
+  final List<int> sesler;
   /// Kaydedilmiş tek kişilik oyun (devam et).
   final Map<String, dynamic>? kayit;
   final int botSayisi; // 1..4 (yerel oyun)
@@ -45,7 +55,7 @@ class _Ucan {
   final double scaleTo;
 }
 
-class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
+class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, WidgetsBindingObserver {
   late final Game game;
   late final _GameDinleyici _dinleyici;
   late final Player ben;
@@ -71,8 +81,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Player? _konusan;
   final AudioPlayer _klip = AudioPlayer();
   final AudioPlayer _sohbetKlip = AudioPlayer();
-  final AudioPlayer _muzik = AudioPlayer();
   final AudioPlayer _efekt = AudioPlayer();
+  final AudioPlayer _efekt2 = AudioPlayer();
   final _sohbetYazi = TextEditingController();
   final List<(Player, String)> _sohbetGecmis = [];
   (Player, String)? _sohbetBalon;
@@ -90,11 +100,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   int _sonSira = -1;
   late final HumanDecider _insan = HumanDecider(() => context);
   final Map<Player, (String, int)> _profiller = {};
+  final Map<Player, int> _sesNo = {};
   Map<String, dynamic>? _odul;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     if (_online) {
       final oy = [
         for (var i = 0; i < widget.adlar.length; i++)
@@ -105,6 +123,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       game = Game(players: oy);
       for (var i = 0; i < oy.length; i++) {
         _profiller[oy[i]] = (i < widget.avatarlar.length ? widget.avatarlar[i] : (oy[i].isBot ? '🤖' : '🙂'), i < widget.leveller.length ? widget.leveller[i] : 1);
+        _sesNo[oy[i]] = i < widget.sesler.length ? widget.sesler[i] : i % sesAdlari.length;
       }
     } else if (widget.kayit != null) {
       final oy = widget.kayit!['oyuncular'] as List;
@@ -115,6 +134,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       for (final b in botlar) {
         _profiller[b] = (avatarlar[rng.nextInt(avatarlar.length)], 1 + rng.nextInt(12));
       }
+      _botSesAta();
     } else {
       ben = Player(Hesap.o.nick, isBot: false, decider: _insan);
       final n = widget.botSayisi.clamp(1, 4);
@@ -126,6 +146,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       for (final b in botlar) {
         _profiller[b] = (avatarlar[rng.nextInt(avatarlar.length)], 1 + rng.nextInt(12));
       }
+      _botSesAta();
     }
     _profiller[ben] = (Hesap.o.avatar, Hesap.o.level);
     for (final b in botlar) {
@@ -138,12 +159,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     game.sozBekle = _sozBekle;
     _klipleriYukle();
     kartArkasiStili = Hesap.o.kartArkasi;
-    _muzikBaslat();
+    Muzik.o.guncelle();
     Izleme.o.olay('oyun_basladi', {'mod': _online ? 'online' : 'bot', 'oyuncu': widget.adlar.isNotEmpty ? widget.adlar.length : widget.botSayisi + 1, 'devam': widget.kayit != null});
     if (_online) {
       _netAbone = widget.net!.mesajlar.listen(_netMesaj);
+      Hesap.o.engelleriYukle().catchError((_) => <Map<String, dynamic>>[]);
       widget.net!.koptu.listen((_) {
-        if (mounted) _mesaj('Sunucu bağlantısı koptu.');
+        if (mounted) _mesaj(t('Sunucu bağlantısı koptu.'));
       });
       return;
     }
@@ -162,16 +184,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     });
   }
 
+  void _botSesAta() {
+    _sesNo[ben] = Hesap.o.ses;
+    final s = botSesleri([for (final b in botlar) b.name], [Hesap.o.ses]);
+    for (var i = 0; i < botlar.length; i++) {
+      _sesNo[botlar[i]] = s[i];
+    }
+  }
+
   /// Sıra değişimini izler: kendi tur sayım (hızlı galibiyet rozeti) ve yerel tur sayacı.
   void _turTakip() {
     if (game.current == _sonSira) return;
     _sonSira = game.current;
     if (game.aktif == ben) {
       _benimTurum++;
-      if (!_online && Ayarlar.o.turSuresi > 0 && game.kazanan == null) {
-        _sureBitis = DateTime.now().add(Duration(seconds: Ayarlar.o.turSuresi));
-        _sayacKur();
-      }
     } else if (!_online) {
       _sureBitis = null;
       _sayacKur();
@@ -191,8 +217,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       if (kalan <= 0) {
         _sayacTik?.cancel();
         if (!_online && _sirada) {
-          _mesaj('Süre doldu, tur geçti.');
-          _turBitir();
+          _mesaj(t('Süre doldu, tur geçti.'));
+          _turBitir(sureDoldu: true);
         }
       }
     });
@@ -211,6 +237,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   }
 
   // ----------------------------------------------------------- online
+  bool _engelli(Player p) => _online && !p.isBot && p != ben && Hesap.o.engelliMi(p.name);
+
+  Future<void> _rozetMenu(Player p) async {
+    if (p.isBot || p == ben) return;
+    await kullaniciMenusu(context, p.name, baglam: 'oyun');
+  }
+
   void _netMesaj(Map<String, dynamic> m) {
     if (!mounted) return;
     switch (m['t']) {
@@ -233,22 +266,29 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         final e = olayOku(game, Map<String, dynamic>.from(m['o'] as Map));
         _olayKuyrugu = _olayKuyrugu.then((_) => _animasyon(e));
       case 'soz':
-        _konus(game.players[m['kim'] as int], m['soz'] as String);
+        final sk = game.players[m['kim'] as int];
+        if (_engelli(sk)) return;
+        _konus(sk, m['soz'] as String);
       case 'sor':
         _soruyaCevap(m);
       case 'hata':
-        _mesaj(m['m'] as String? ?? 'Hata');
+        _mesaj(oyunMetin(m['m'] as String? ?? 'Hata'));
       case 'bilgi':
-        _mesaj(m['m'] as String? ?? '');
+        _mesaj(oyunMetin(m['m'] as String? ?? ''));
       case 'sohbet':
-        _sohbetGoster(game.players[m['kim'] as int], m['soz'] as String);
+        final hk = game.players[m['kim'] as int];
+        if (_engelli(hk)) return;
+        _sohbetGoster(hk, m['soz'] as String);
       case 'siran':
-        _efektCal('ef_karistir');
-        if (mounted) _mesaj('Sıra sende!');
+        _efektCal('ef_karistir.mp3');
+        if (mounted) _mesaj(t('Sıra sende!'));
       case 'odul':
         _odul = m;
         Hesap.o.odulGeldi(m);
         if (mounted) setState(() {});
+      case 'bahisIade':
+        Hesap.o.odulGeldi(m);
+        if (mounted) _mesaj(t('Oyun iptal oldu, altının iade edildi.'));
       case 'bitti':
         _bitisKontrol();
     }
@@ -273,7 +313,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         case 'jokerRengi':
           final sec = [for (final i in (m['secenekler'] as List)) PColor.values[i as int]];
           final kart = kartBul(game, m['kart'] as int) ?? ben.hand.first;
-          deger = (await _insan.jokerRengi(game, ben, kart, sec)).index;
+          deger = (await _insan.jokerRengi(game, ben, kart, sec))?.index ?? -1;
         case 'atilacaklar':
           final l = await _insan.atilacaklar(game, ben, m['adet'] as int);
           deger = [for (final c in l) c.id];
@@ -295,10 +335,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _klip.dispose();
     _sohbetKlip.dispose();
-    _muzik.dispose();
     _efekt.dispose();
+    _efekt2.dispose();
     _sohbetYazi.dispose();
     _dinleyici.dispose();
     _netAbone?.cancel();
@@ -322,7 +364,16 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   /// Gemini ile önceden üretilmiş klip (oyuncu sırası|cümle). Yoksa null.
   String? _klipAdi(Player p, String soz) {
-    final i = game.players.indexOf(p);
+    final i = _sesNo[p] ?? game.players.indexOf(p) % sesAdlari.length;
+    if (Dil.o.en) {
+      final en = sozEn(soz);
+      if (en == null) return null;
+      for (final k in [i, for (var j = 0; j < sesAdlari.length; j++) j]) {
+        final v = _klipler['en|$k|$en'];
+        if (v is String) return v;
+      }
+      return null;
+    }
     final v = _klipler['$i|$soz'];
     return v is String ? v : null;
   }
@@ -331,10 +382,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final o = oynatici ?? _klip;
     try {
       final bitti = o.onPlayerComplete.first;
-      await o.play(AssetSource('ses/$ad'));
+      await o.play(AssetSource('ses/$ad')).timeout(const Duration(seconds: 5));
       await bitti.timeout(const Duration(seconds: 10));
       return true;
     } catch (_) {
+      try {
+        await o.stop().timeout(const Duration(seconds: 2));
+      } catch (_) {}
       return false;
     }
   }
@@ -353,13 +407,19 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     _sonSoz = _sonSoz.then((_) => _seslendir(p, soz, no));
   }
 
-  Future<void> _sozBekle() => _sonSoz;
+  Future<void> _sozBekle() async {
+    try {
+      await _sonSoz.timeout(const Duration(seconds: 12));
+    } catch (_) {
+      _sonSoz = Future.value();
+    }
+  }
 
   /// Klip varsa çalar; yoksa (robotik cihaz sesi kullanılmaz) okuma süresi kadar sessiz bekler.
   Future<void> _sesCal(Player p, String soz, {AudioPlayer? oynatici}) async {
     final klip = _klipAdi(p, soz);
     if (_sesli && klip != null && await _klipCal(klip, oynatici: oynatici)) return;
-    await Future.delayed(Duration(milliseconds: 500 + soz.length * 35));
+    await Future.delayed(Duration(milliseconds: 500 + sozGoster(soz).length * 35));
   }
 
   // ----------------------------------------------------------- sohbet / emoji
@@ -369,19 +429,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   bool _emojiMi(String s) => sohbetEmojileri.contains(s);
 
-  Future<void> _muzikBaslat() async {
-    if (!Ayarlar.o.muzik) return;
-    try {
-      await _muzik.setReleaseMode(ReleaseMode.loop);
-      await _muzik.setVolume(0.35);
-      await _muzik.play(AssetSource('ses/muzik.mp3'));
-    } catch (_) {}
-  }
+  String _sohbetMetni(String s) => sohbetSozleri.contains(s) ? sozGoster(s) : s;
 
-  Future<void> _efektCal(String ad) async {
+  Future<void> _efektCal(String ad, {bool ikinci = false}) async {
     if (!_sesli) return;
     try {
-      await _efekt.play(AssetSource('ses/$ad.mp3'));
+      await (ikinci ? _efekt2 : _efekt).play(AssetSource('ses/$ad'));
     } catch (_) {}
   }
 
@@ -400,7 +453,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 reverse: true,
                 children: [
                   for (final (p, m) in _sohbetGecmis.reversed.take(12))
-                    Text('${p == ben ? 'Sen' : gorunenAd(p.name)}: $m', style: TextStyle(color: p == ben ? Colors.amber : Colors.white70, fontSize: 13)),
+                    Text('${p == ben ? t('Sen') : gorunenAd(p.name)}: ${_sohbetMetni(m)}', style: TextStyle(color: p == ben ? Colors.amber : Colors.white70, fontSize: 13)),
                 ],
               ),
             ),
@@ -412,7 +465,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 controller: _sohbetYazi,
                 maxLength: 80,
                 style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(hintText: 'Mesaj yaz…', hintStyle: TextStyle(color: Colors.white38), counterText: '', enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white38)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.amber)), isDense: true),
+                decoration: InputDecoration(hintText: t('Mesaj yaz…'), hintStyle: const TextStyle(color: Colors.white38), counterText: '', enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white38)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.amber)), isDense: true),
                 onSubmitted: (v) {
                   if (v.trim().isEmpty) return;
                   Navigator.pop(ctx);
@@ -450,7 +503,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 backgroundColor: const Color(0xFFF3E3BF),
                 surfaceTintColor: Colors.transparent,
                 side: const BorderSide(color: Color(0xFFC9962B)),
-                label: Text(sz, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w700)),
+                label: Text(sozGoster(sz), style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w700)),
                 onPressed: () {
                   Navigator.pop(ctx);
                   _sohbetGonder(sz);
@@ -506,7 +559,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (!mounted) return;
     setState(() {
       _konusan = p;
-      _banner = soz;
+      _banner = sozGoster(soz);
     });
     await _sesCal(p, soz);
     if (mounted && no == _sozSayac) {
@@ -572,14 +625,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     if (!mounted) return;
     if (_acikDeste != null) setState(() => _acikDeste = null);
     final kim = e.kim;
-    final adim = kim == ben ? 'Sen' : gorunenAd(kim?.name ?? '');
+    final adim = kim == ben ? t('Sen') : gorunenAd(kim?.name ?? '');
     Offset elM(Player p) => _masaNokta(p == ben ? _kBenEl : _kBotEl[p]);
     Offset setM(Player p) => _masaNokta(p == ben ? _kBenSet : _kBotSet[p]);
     Offset bankaM(Player p) => _masaNokta(p == ben ? _kBenBanka : _kBotSet[p]);
     final deste = _masaNokta(_kDeck), yakilan = _masaNokta(_kMerkez);
     switch (e.tip) {
       case EvTip.cek:
-        _efektCal('ef_dagit');
+        _efektCal('ef_dagit.mp3');
         if (kim == ben) {
           // desteden elime: masadan çıkıp 2B ele iner
           await _ucur(e.card, _nokta(_kDeck), _elNoktasi(kim!), ms: 520, w: 60, scaleTo: 1.25);
@@ -588,16 +641,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         }
         await Future.delayed(const Duration(milliseconds: 120));
       case EvTip.mulk:
-        _efektCal('ef_cevir');
+        _efektCal('ef_damga.wav');
         await _masaUcur(e.card, elM(kim!), setM(kim), ms: 520, w: kim == ben ? 56 : 46);
+        final renk = e.renk;
+        if (renk != null && e.card.isProperty && e.card.action != ActionType.house && e.card.action != ActionType.hotel && kim.propsOf(renk).length + 1 >= renk.setBoyu) {
+          _efektCal('ef_set.wav', ikinci: true);
+        }
       case EvTip.banka:
-        _efektCal('ef_para');
+        _efektCal('ef_coin.wav');
         await _masaUcur(e.card, elM(kim!), bankaM(kim), ms: 480, w: kim == ben ? 56 : 46);
       case EvTip.aksiyon:
         final orta = Offset((deste.dx + yakilan.dx) / 2, deste.dy - 90);
         await _masaUcur(e.card, elM(kim!), orta, ms: 460, w: 56, scaleTo: 1.8);
         if (!mounted) return;
-        setState(() => _banner = '$adim: ${e.etiket ?? e.card.ad}');
+        setState(() => _banner = '$adim: ${e.etiket != null ? _bas(oyunMetin(e.etiket!)) : e.card.adT}');
         await Future.delayed(Duration(milliseconds: kim == ben ? 700 : 1100));
         if (!mounted) return;
         setState(() => _banner = null);
@@ -605,11 +662,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       case EvTip.transfer:
         final from = e.card.isProperty ? setM(kim!) : bankaM(kim!);
         final to = e.card.isProperty ? setM(e.kime!) : bankaM(e.kime!);
-        if (mounted) setState(() => _banner = '${e.etiket ?? 'Ödeme'}: ${e.card.ad} → ${e.kime!.name}');
+        if (mounted) setState(() => _banner = '${_bas(oyunMetin(e.etiket ?? 'Ödeme'))}: ${e.card.adT} → ${e.kime!.name}');
         await _masaUcur(e.card, from, to, ms: 650, w: 50);
         if (mounted) setState(() => _banner = null);
     }
   }
+
+  String _bas(String s) => Dil.o.en && s.isNotEmpty ? s[0].toUpperCase() + s.substring(1) : s;
 
   // ----------------------------------------------------------- akış
   /// Sıradaki(ler) botsa sırayla oynatır; sıra insana gelince durur.
@@ -646,27 +705,80 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     Future.delayed(Duration(milliseconds: _online ? 1200 : 1500), () {
       if (!mounted) return;
       final o = _odul;
+      final bahisliOyun = _online && ((o?['bahis'] as num?) ?? 0) > 0;
+      final net = (o?['net'] as num?)?.toInt() ?? 0;
+      if (k == ben) {
+        konfetiPatlat(context);
+        AltinSes.zafer();
+      }
+      final altinSesi = bahisliOyun ? net != 0 : ((o?['altin'] as num?) ?? 0) > 0;
+      if (altinSesi) {
+        Future.delayed(Duration(milliseconds: k == ben ? 2000 : 300), () {
+          if (bahisliOyun && net < 0) {
+            AltinSes.azaldi();
+          } else {
+            AltinSes.artti();
+          }
+        });
+      }
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
-          title: Text(k == ben ? '🏆 Kazandın!' : '😔 ${k.name} kazandı'),
+          title: Text(k == ben ? t('🏆 Kazandın!') : t('😔 {ad} kazandı', {'ad': k.name})),
           content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${k.name} 3 tam set topladı: ${k.tamSetler.map((c) => c.ad).join(', ')}.'),
+            Text(t('{ad} 3 tam set topladı: {setler}.', {'ad': k.name, 'setler': k.tamSetler.map((c) => c.adT).join(', ')})),
             const SizedBox(height: 12),
             for (final p in sira)
-              Text('${p == k ? '🏆 ' : ''}${p.name}: ${p.tamSetSayisi} tam set · ${p.varlikToplam}M varlık', style: TextStyle(fontWeight: p == ben ? FontWeight.w700 : FontWeight.w400)),
+              Text('${p == k ? '🏆 ' : ''}${t('{ad}: {n} tam set · {m}M varlık', {'ad': p.name, 'n': p.tamSetSayisi, 'm': p.varlikToplam})}', style: TextStyle(fontWeight: p == ben ? FontWeight.w700 : FontWeight.w400)),
             const SizedBox(height: 12),
             if (o != null)
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(color: const Color(0xFFFFF3C4), borderRadius: BorderRadius.circular(8)),
-                child: Text('+${o['xp']} XP  ·  +${o['altin']} altın${o['levelAtladi'] == true ? '  ·  🎉 Seviye ${o['level']}!' : '  ·  Seviye ${o['level']}'}', style: const TextStyle(fontWeight: FontWeight.w800)),
+                child: Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  if (((o['xp'] as num?) ?? 0) > 0) ...[
+                    SayiSayac(deger: (o['xp'] as num).toInt(), bicim: (n) => '+$n XP', stil: const TextStyle(fontWeight: FontWeight.w800), gecikme: const Duration(milliseconds: 300)),
+                    const Text('  ·  ', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ],
+                  if (!bahisliOyun) ...[
+                    SayiSayac(deger: (o['altin'] as num).toInt(), bicim: (n) => '+${t('{n} altın', {'n': n})}', stil: const TextStyle(fontWeight: FontWeight.w800), gecikme: const Duration(milliseconds: 300)),
+                    const Text('  ·  ', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ],
+                  Text(o['levelAtladi'] == true ? t('🎉 Seviye {l}!', {'l': o['level']}) : t('Seviye {l}', {'l': o['level']}), style: const TextStyle(fontWeight: FontWeight.w800)),
+                ]),
               ),
-            Text('Toplam: ${a.oynanan} oyun, ${a.kazanilan} galibiyet (%$oran)', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+            if (o != null && bahisliOyun) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: net > 0 ? const Color(0xFFD9F5DC) : (net < 0 ? const Color(0xFFFADBD8) : const Color(0xFFE3EEFA)), borderRadius: BorderRadius.circular(8)),
+                child: Column(children: [
+                  Text(
+                    switch (o['sonuc']) {
+                      'kazandin' => t('🏆 Ödülü kazandın!'),
+                      'iade' => t('↩️ Bot kazandı: altının iade edildi'),
+                      'terk' => t('🚪 Oyundan düştüğün için altının kayboldu'),
+                      _ => t('💸 Altınını kaybettin'),
+                    },
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  if (net != 0)
+                    SayiSayac(deger: net.abs(), bicim: (n) => '${net > 0 ? '+' : '-'}${t('{n} altın', {'n': n})}', stil: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: net > 0 ? const Color(0xFF1E7B3A) : const Color(0xFFB3261E)), gecikme: const Duration(milliseconds: 300)),
+                ]),
+              ),
+            ],
+            if (o != null && o['limitDoldu'] == true && !bahisliOyun)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(t('Günlük bot altın sınırına ulaştın; bugün botlu oyunlar altın vermez. Online oyunlarda sınır yok.'), style: const TextStyle(fontSize: 12, color: Color(0xFFB3261E), fontWeight: FontWeight.w700)),
+              ),
+            Text(t('Toplam: {o} oyun, {k} galibiyet (%{oran})', {'o': a.oynanan, 'k': a.kazanilan, 'oran': oran}), style: const TextStyle(fontSize: 12, color: Colors.black54)),
           ]),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).popUntil((r) => r.isFirst), child: const Text('Menüye dön')),
+            TextButton(onPressed: () => Navigator.of(ctx).popUntil((r) => r.isFirst), child: Text(t('Menüye dön'))),
             FilledButton(
               onPressed: () {
                 Navigator.of(ctx).pop();
@@ -676,7 +788,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 }
                 Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => GameScreen(botSayisi: widget.botSayisi)));
               },
-              child: Text(_online ? 'Lobiye dön' : 'Revanş'),
+              child: Text(_online ? t('Lobiye dön') : t('Revanş')),
             ),
           ],
         ),
@@ -708,7 +820,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         duration: const Duration(seconds: 4),
         backgroundColor: const Color(0xFF1E7B3A),
-        content: Text('🏅 Yeni başarım: ${yeni.map((b) => '${b.ikon} ${b.ad}').join(', ')}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+        content: Text(t('🏅 Yeni başarım: {liste}', {'liste': yeni.map((b) => '${b.ikon} ${t(b.ad)}').join(', ')}), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
       ));
     }
   }
@@ -793,46 +905,75 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final onceki = _sonTik[c.id];
     if (onceki != null && simdi.difference(onceki) < const Duration(milliseconds: 1500)) return;
     _sonTik[c.id] = simdi;
-    if (!_sirada) return _mesaj('Sıra sende değil.');
-    if (game.playsLeft <= 0) return _mesaj('Hamle hakkın bitti.');
+    if (!_sirada) return _mesaj(t('Sıra sende değil.'));
+    if (game.playsLeft <= 0) return _mesaj(t('Hamle hakkın bitti.'));
     if (c.isProperty || c.isMoney) {
       final ok = c.isMoney
           ? await _yap('banka', {'kart': c.id}, () => game.bankayaKoy(ben, c))
           : await _yap('mulk', {'kart': c.id}, () => game.mulkOyna(ben, c));
-      if (!ok && mounted) _mesaj('Bu hamle yapılamadı.');
+      if (!ok && mounted) _mesaj(t('Bu hamle yapılamadı.'));
       return _sonra();
     }
     final aktif = _oynanabilir(c);
+    final bankaYap = () => _yap('banka', {'kart': c.id}, () => game.bankayaKoy(ben, c));
+    if (c.isRent) {
+      final ok = aktif ? await _kira(c) : await bankaYap();
+      if (!ok && mounted) _mesaj(t('Bu hamle yapılamadı.'));
+      return _sonra();
+    }
+    if (c.isAction && (c.action == ActionType.house || c.action == ActionType.hotel)) {
+      final setler = _binaSetleri(c);
+      bool ok;
+      if (setler.isEmpty) {
+        ok = await bankaYap();
+      } else {
+        setler.sort((a, b) => ben.kira(b).compareTo(ben.kira(a)));
+        final s = setler.first;
+        ok = await _yap('bina', {'kart': c.id, 'set': s.index}, () => game.binaKoy(ben, c, s));
+      }
+      if (!ok && mounted) _mesaj(t('Bu hamle yapılamadı.'));
+      return _sonra();
+    }
+    if (c.isAction) {
+      final a = c.action!;
+      final hep = a == ActionType.doubleRent || a == ActionType.justSayNo;
+      final yok = !aktif && a != ActionType.passGo;
+      if (hep || yok) {
+        final ok = await bankaYap();
+        if (!ok && mounted) _mesaj(t('Bu hamle yapılamadı.'));
+        return _sonra();
+      }
+    }
     final secenekler = <_Secenek>[];
-    if (c.isRent) secenekler.add(_Secenek('💰 Kira iste', () => _kira(c), aktif: aktif));
+    if (c.isRent) secenekler.add(_Secenek(t('💰 Kira iste'), () => _kira(c), aktif: aktif));
     if (c.isAction) {
       final a = c.action!;
       switch (a) {
         case ActionType.passGo:
-          secenekler.add(_Secenek('▶ 2 Kart Çek', () => _yap('passGo', {'kart': c.id}, () => game.passGo(ben, c))));
+          secenekler.add(_Secenek(t('▶ 2 Kart Çek'), () => _yap('passGo', {'kart': c.id}, () => game.passGo(ben, c))));
         case ActionType.tahsilat:
-          secenekler.add(_Secenek('💵 Tahsilat: 5M al', () => _tahsilat(c), aktif: aktif));
+          secenekler.add(_Secenek(t('💵 İcra Takibi: 5M al'), () => _tahsilat(c), aktif: aktif));
         case ActionType.birthday:
-          secenekler.add(_Secenek('🎂 Doğum Günüm: herkesten 2M', () => _yap('dogumGunu', {'kart': c.id}, () => game.dogumGunu(ben, c)), aktif: aktif));
+          secenekler.add(_Secenek(t('🎉 Ev Partisi: herkesten 2M'), () => _yap('dogumGunu', {'kart': c.id}, () => game.dogumGunu(ben, c)), aktif: aktif));
         case ActionType.slyDeal:
-          secenekler.add(_Secenek('🕵️ Tapu Devri: rakipten tapu al', () => _slyDeal(c), aktif: aktif));
+          secenekler.add(_Secenek(t('🕵️ Tapu Devri: rakipten tapu al'), () => _slyDeal(c), aktif: aktif));
         case ActionType.forcedDeal:
-          secenekler.add(_Secenek('🔁 Değiş Tokuş: tapu takası', () => _forcedDeal(c), aktif: aktif));
+          secenekler.add(_Secenek(t('🔁 Takas Pazarlığı: tapu takası'), () => _forcedDeal(c), aktif: aktif));
         case ActionType.dealBreaker:
-          secenekler.add(_Secenek('💥 Haciz: tam seti al', () => _dealBreaker(c), aktif: aktif));
+          secenekler.add(_Secenek(t('💥 Haciz: tam seti al'), () => _dealBreaker(c), aktif: aktif));
         case ActionType.house:
         case ActionType.hotel:
-          secenekler.add(_Secenek('🏗️ ${a.ad} koy (tam sete)', () => _bina(c), aktif: aktif));
+          secenekler.add(_Secenek(t('🏗️ {ad} koy (tam sete)', {'ad': a.adT}), () => _bina(c), aktif: aktif));
         case ActionType.doubleRent:
-          secenekler.add(_Secenek('✖2 Çift kira (kira kartıyla)', () => _ciftKira(c), aktif: aktif));
+          secenekler.add(_Secenek(t('✖2 Çift kira (kira kartıyla)'), () => _ciftKira(c), aktif: aktif));
         case ActionType.justSayNo:
-          secenekler.add(_Secenek('ℹ️ Sadece savunmada oynanır', () async {
-            _mesaj('Reddet kartı, rakip sana aksiyon oynayınca sorulur.');
+          secenekler.add(_Secenek(t('ℹ️ Sadece savunmada oynanır'), () async {
+            _mesaj(t('Reddet kartı, rakip sana aksiyon oynayınca sorulur.'));
             return false;
           }, aktif: false));
       }
     }
-    secenekler.add(_Secenek('🏦 Bankaya koy (${c.paraDegeri}M para olur)', () => _yap('banka', {'kart': c.id}, () => game.bankayaKoy(ben, c))));
+    secenekler.add(_Secenek(t('🏦 Bankaya koy ({n}M para olur)', {'n': c.paraDegeri}), () => _yap('banka', {'kart': c.id}, () => game.bankayaKoy(ben, c))));
     final sec = await showModalBottomSheet<_Secenek>(
       context: context,
       builder: (ctx) => SafeArea(
@@ -842,14 +983,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             child: Row(children: [
               CardView(c, w: 70),
               const SizedBox(width: 12),
-              Expanded(child: Text(c.isAction ? c.action!.aciklama : c.ad, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
+              Expanded(child: Text(c.isAction ? c.action!.aciklamaT : c.adT, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
             ]),
           ),
           for (final s in secenekler)
             ListTile(
               enabled: s.aktif,
               title: Text(s.baslik, style: TextStyle(color: s.aktif ? null : Colors.grey)),
-              subtitle: s.aktif ? null : const Text('şu an oynanamaz', style: TextStyle(fontSize: 11)),
+              subtitle: s.aktif ? null : Text(t('şu an oynanamaz'), style: const TextStyle(fontSize: 11)),
               onTap: s.aktif ? () => Navigator.pop(ctx, s) : null,
             ),
           const SizedBox(height: 6),
@@ -857,8 +998,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
     if (sec == null) return;
+    _vazgecildi = false;
     final ok = await sec.calistir();
-    if (!ok && mounted) _mesaj('Bu hamle yapılamadı.');
+    if (!ok && !_vazgecildi && mounted) _mesaj(t('Bu hamle yapılamadı.'));
     await _sonra();
   }
 
@@ -879,16 +1021,22 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             ListTile(
               leading: const Icon(Icons.smart_toy),
               title: Text(r.name),
-              subtitle: Text(altYazi == null ? '🏦 ${r.bankaToplam}M · varlık ${r.varlikToplam}M' : altYazi(r)),
+              subtitle: Text(altYazi == null ? t('🏦 {n}M · varlık {m}M', {'n': r.bankaToplam, 'm': r.varlikToplam}) : altYazi(r)),
               onTap: () => Navigator.pop(ctx, r),
             ),
         ]),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Vazgeç'))],
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx, null), child: Text(t('Vazgeç')))],
       ),
     );
   }
 
   /// Rakip kartlarından seçtirir; birden fazla rakip varsa oyuncuya göre gruplar.
+  bool _vazgecildi = false;
+  bool _iptal() {
+    _vazgecildi = true;
+    return false;
+  }
+
   Future<GameCard?> _rakipKartiSec(String baslik, Map<Player, List<GameCard>> gruplar) async {
     final hepsi = [for (final l in gruplar.values) ...l];
     if (hepsi.length == 1) return hepsi.first;
@@ -911,18 +1059,18 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Future<bool> _tahsilat(GameCard c) async {
     final adaylar = _rakipler.where((r) => r.varliklar.isNotEmpty).toList();
     if (adaylar.isEmpty) {
-      _mesaj('Kimsenin ödeyecek bir şeyi yok.');
+      _mesaj(t('Kimsenin ödeyecek bir şeyi yok.'));
       return false;
     }
-    final r = await _rakipSec('💵 Kimden 5M?', adaylar);
-    if (r == null) return false;
+    final r = await _rakipSec(t('💵 Kimden 5M?'), adaylar);
+    if (r == null) return _iptal();
     return _yap('tahsilat', {'kart': c.id, 'hedef': game.players.indexOf(r)}, () => game.tahsilat(ben, c, r));
   }
 
   Future<bool> _kira(GameCard c) async {
     final renkler = _kiraRenkleri(c);
     if (renkler.isEmpty) {
-      _mesaj('Bu renkte tapun yok.');
+      _mesaj(t('Bu renkte tapun yok.'));
       return false;
     }
     // En yüksek kirayı veren renk otomatik seçilir, sorulmaz.
@@ -930,7 +1078,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     GameCard? cift;
     final ciftKart = ben.hand.where((x) => x.action == ActionType.doubleRent).toList();
     if (ciftKart.isNotEmpty && game.playsLeft >= 2 && mounted) {
-      if (await confirmDlg(context, '✖2 Çift Kira?', 'Çift Kira kartını da oynayıp ${ben.kira(renk) * 2}M isteyeyim mi? (2 hamle harcar)',
+      if (await confirmDlg(context, t('✖2 Zam Geldi?'), t('Zam Geldi kartını da oynayıp {n}M isteyeyim mi? (2 hamle harcar)', {'n': ben.kira(renk) * 2}),
           evet: 'Evet, çift', hayir: 'Hayır, tek')) {
         cift = ciftKart.first;
       }
@@ -941,15 +1089,15 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Future<bool> _ciftKira(GameCard cift) async {
     final kiralar = ben.hand.where((x) => x.isRent && _kiraRenkleri(x).isNotEmpty).toList();
     if (kiralar.isEmpty) {
-      _mesaj('Oynanabilir kira kartın yok.');
+      _mesaj(t('Oynanabilir kira kartın yok.'));
       return false;
     }
     if (game.playsLeft < 2) {
-      _mesaj('Çift kira için 2 hamle gerekir.');
+      _mesaj(t('Çift kira için 2 hamle gerekir.'));
       return false;
     }
-    final c = await _kartSec('Hangi kira kartıyla?', kiralar);
-    if (c == null || !mounted) return false;
+    final c = await _kartSec(t('Hangi kira kartıyla?'), kiralar);
+    if (c == null || !mounted) return _iptal();
     final renk = _kiraRenkleri(c).reduce((x, y) => ben.kira(y) > ben.kira(x) ? y : x);
     return _yap('kira', {'kart': c.id, 'renk': renk.index, 'cift': cift.id}, () => game.kiraOyna(ben, c, renk, cift: cift));
   }
@@ -957,11 +1105,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Future<bool> _slyDeal(GameCard c) async {
     final gruplar = {for (final r in _rakipler) r: game.calinabilir(r)};
     if (gruplar.values.every((l) => l.isEmpty)) {
-      _mesaj('Rakiplerde alınabilir tapu yok (tam setler korunur).');
+      _mesaj(t('Rakiplerde alınabilir tapu yok (tam setler korunur).'));
       return false;
     }
-    final h = await _rakipKartiSec('🕵️ Hangi tapuyu alıyorsun?', gruplar);
-    if (h == null) return false;
+    final h = await _rakipKartiSec(t('🕵️ Hangi tapuyu alıyorsun?'), gruplar);
+    if (h == null) return _iptal();
     return _yap('slyDeal', {'kart': c.id, 'hedefKart': h.id}, () => game.slyDeal(ben, c, h));
   }
 
@@ -969,48 +1117,48 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final gruplar = {for (final r in _rakipler) r: game.calinabilir(r)};
     final benimkiler = game.calinabilir(ben);
     if (gruplar.values.every((l) => l.isEmpty) || benimkiler.isEmpty) {
-      _mesaj('Değiş tokuş için iki tarafta da tamamlanmamış setten tapu olmalı.');
+      _mesaj(t('Değiş tokuş için iki tarafta da tamamlanmamış setten tapu olmalı.'));
       return false;
     }
-    final o = await _rakipKartiSec('🔁 Rakipten hangisini alıyorsun?', gruplar);
-    if (o == null || !mounted) return false;
-    final b = await _kartSec('🔁 Karşılığında hangisini veriyorsun?', benimkiler);
-    if (b == null) return false;
+    final o = await _rakipKartiSec(t('🔁 Rakipten hangisini alıyorsun?'), gruplar);
+    if (o == null || !mounted) return _iptal();
+    final b = await _kartSec(t('🔁 Karşılığında hangisini veriyorsun?'), benimkiler);
+    if (b == null) return _iptal();
     return _yap('forcedDeal', {'kart': c.id, 'benim': b.id, 'onun': o.id}, () => game.forcedDeal(ben, c, b, o));
   }
 
   Future<bool> _dealBreaker(GameCard c) async {
     final adaylar = _rakipler.where((r) => r.tamSetler.isNotEmpty).toList();
     if (adaylar.isEmpty) {
-      _mesaj('Rakiplerin tam seti yok.');
+      _mesaj(t('Rakiplerin tam seti yok.'));
       return false;
     }
-    final r = await _rakipSec('💥 Kimin setini alıyorsun?', adaylar, altYazi: (p) => 'tam set: ${p.tamSetler.map((s) => s.ad).join(', ')}');
-    if (r == null || !mounted) return false;
-    final s = await _renkSec('💥 Hangi tam seti?', r.tamSetler);
-    if (s == null) return false;
+    final r = await _rakipSec(t('💥 Kimin setini alıyorsun?'), adaylar, altYazi: (p) => t('tam set: {liste}', {'liste': p.tamSetler.map((s) => s.adT).join(', ')}));
+    if (r == null || !mounted) return _iptal();
+    final s = await _renkSec(t('💥 Hangi tam seti?'), r.tamSetler);
+    if (s == null) return _iptal();
     return _yap('dealBreaker', {'kart': c.id, 'hedef': game.players.indexOf(r), 'set': s.index}, () => game.dealBreaker(ben, c, r, s));
   }
 
   Future<bool> _bina(GameCard c) async {
     final setler = _binaSetleri(c);
     if (setler.isEmpty) {
-      _mesaj(c.action == ActionType.house ? 'Evsiz tam setin yok.' : 'Evli (otelsiz) tam setin yok.');
+      _mesaj(c.action == ActionType.house ? t('Evsiz tam setin yok.') : t('Evli (rezidanssız) tam setin yok.'));
       return false;
     }
-    final s = await _renkSec('🏗️ Hangi sete?', setler);
-    if (s == null) return false;
+    final s = await _renkSec(t('🏗️ Hangi sete?'), setler);
+    if (s == null) return _iptal();
     return _yap('bina', {'kart': c.id, 'set': s.index}, () => game.binaKoy(ben, c, s));
   }
 
-  Future<void> _turBitir() async {
+  Future<void> _turBitir({bool sureDoldu = false}) async {
     if (!_hazir || game.aktif != ben || game.kazanan != null || _botOynuyor) return;
     setState(() => _acikDeste = null);
     if (_online) {
       widget.net!.gonder({'t': 'hamle', 'tip': 'turBitir'});
       return;
     }
-    await game.turBitir();
+    await game.turBitir(sureDoldu: sureDoldu);
     if (mounted) setState(() {});
     _botKontrol();
   }
@@ -1028,24 +1176,50 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       listenable: _dinleyici,
       builder: (context, _) {
         final durum = !_hazir
-            ? 'Kartlar dağıtılıyor…'
+            ? t('Kartlar dağıtılıyor…')
             : game.kazanan != null
-                ? 'Oyun bitti'
+                ? t('Oyun bitti')
                 : (_botOynuyor || (_online && game.aktif != ben))
-                    ? '${game.aktif.name} oynuyor…'
+                    ? t('{ad} oynuyor…', {'ad': game.aktif.name})
                     : game.aktif == ben
-                        ? 'Sıra sende · ${game.playsLeft} hamle'
+                        ? t('Sıra sende · {n} hamle', {'n': game.playsLeft})
                         : '${game.aktif.name}…';
-        return Scaffold(
+        return PopScope(
+          canPop: !(_online && widget.bahis > 0 && game.kazanan == null),
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            final git = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: Text(t('Oyundan çıkılsın mı?')),
+                content: Text(t('Altınlı bir oyundasın. Çıkarsan {n} altınını kaybedersin.', {'n': widget.bahis})),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t('Devam et'))),
+                  FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t('Çık'))),
+                ],
+              ),
+            );
+            if (git == true && mounted) Navigator.of(context).pop();
+          },
+          child: Scaffold(
           backgroundColor: const Color(0xFF1B5E3A),
           appBar: AppBar(
             backgroundColor: const Color(0xFF0F3D25),
             foregroundColor: Colors.white,
-            title: Text('Emlak Deal · ${game.players.length} oyuncu', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+            title: Text(t('Emlak Deal · {n} oyuncu', {'n': game.players.length}), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
             actions: [
-              IconButton(tooltip: 'Sohbet / emoji', onPressed: _sohbetAc, icon: const Icon(Icons.chat_bubble_outline)),
+              if (_online && widget.bahis > 0)
+                Center(
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(color: const Color(0xFFE0B13A), borderRadius: BorderRadius.circular(12)),
+                    child: Text('🏆 ${widget.havuz}', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 13)),
+                  ),
+                ),
+              IconButton(tooltip: t('Sohbet / emoji'), onPressed: _sohbetAc, icon: const Icon(Icons.chat_bubble_outline)),
               IconButton(
-                tooltip: _sesli ? 'Sesi kapat' : 'Sesi aç',
+                tooltip: _sesli ? t('Sesi kapat') : t('Sesi aç'),
                 onPressed: () => setState(() {
                   _sesli = !_sesli;
                   Ayarlar.o.sesli = _sesli;
@@ -1073,6 +1247,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                     profiller: _profiller,
                     ucanlar: _masaUcanlar,
                     ustBilgi: _durumSeridi(durum),
+                    rozetMenu: _online && !Hesap.o.misafir ? _rozetMenu : null,
                   ),
                 ),
                 _el(),
@@ -1106,8 +1281,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 8, offset: Offset(0, 3))],
                       ),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
-                        Text(_sohbetBalon!.$1 == ben ? 'Sen' : gorunenAd(_sohbetBalon!.$1.name), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.black54)),
-                        Text(_sohbetBalon!.$2, style: TextStyle(fontSize: _emojiMi(_sohbetBalon!.$2) ? 40 : 15, fontWeight: FontWeight.w700, color: Colors.black87)),
+                        Text(_sohbetBalon!.$1 == ben ? t('Sen') : gorunenAd(_sohbetBalon!.$1.name), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.black54)),
+                        Text(_sohbetMetni(_sohbetBalon!.$2), style: TextStyle(fontSize: _emojiMi(_sohbetBalon!.$2) ? 40 : 15, fontWeight: FontWeight.w700, color: Colors.black87)),
                       ]),
                     ),
                   ),
@@ -1128,7 +1303,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                         ),
                         child: Column(mainAxisSize: MainAxisSize.min, children: [
                           if (_konusan != null)
-                            Text(_konusan == ben ? 'Sen' : gorunenAd(_konusan!.name), style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.w800)),
+                            Text(_konusan == ben ? t('Sen') : gorunenAd(_konusan!.name), style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.w800)),
                           Text(_banner!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
                         ]),
                       ),
@@ -1136,6 +1311,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   ),
                 ),
             ]),
+          ),
           ),
         );
       },
@@ -1151,7 +1327,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
             Text(durum, style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w800, fontSize: 14)),
-            Text(son, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+            Text(oyunMetin(son), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white70, fontSize: 11)),
           ]),
         ),
         if (_kalanSn != null && game.kazanan == null)
@@ -1161,9 +1337,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             decoration: BoxDecoration(color: (_kalanSn! <= 10 ? Colors.redAccent : Colors.black54), borderRadius: BorderRadius.circular(10)),
             child: Text('⏱ $_kalanSn', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
           ),
-        Text('Tam set ${ben.tamSetSayisi}/3', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+        Text(t('Tam set {n}/3', {'n': ben.tamSetSayisi}), style: const TextStyle(color: Colors.white70, fontSize: 11)),
         IconButton(
-          tooltip: 'Turu bitir',
+          tooltip: t('Turu bitir'),
           color: _sirada ? Colors.amber : Colors.white24,
           onPressed: _sirada ? _turBitir : null,
           icon: const Icon(Icons.skip_next, size: 28),
@@ -1177,7 +1353,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final kim = p == ben ? 'ben' : p.name;
     final w = kucuk ? 38.0 : 46.0;
     if (renkler.isEmpty && p.bank.isEmpty) {
-      return Text('Henüz kart yok', style: TextStyle(color: Colors.white38, fontSize: kucuk ? 11 : 13));
+      return Text(t('Henüz kart yok'), style: TextStyle(color: Colors.white38, fontSize: kucuk ? 11 : 13));
     }
     final banka = KeyedSubtree(
       key: p == ben ? _kBenBanka : null,
@@ -1185,7 +1361,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         kartlar: p.bank,
         w: w,
         acik: _acikDeste == '$kim:banka',
-        ustBaslik: '🏦 ${p.bank.length} kart',
+        ustBaslik: t('🏦 {n} kart', {'n': p.bank.length}),
         altBaslik: '${p.bankaToplam}M',
         vurgu: false,
         renk: const Color(0xFF1E7B3A),
@@ -1199,8 +1375,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
           kartlar: [...p.propsOf(c), ...(p.binalar[c] ?? const <GameCard>[])],
           w: w,
           acik: _acikDeste == '$kim:${c.name}',
-          ustBaslik: '${c.kisaAd} ${p.propsOf(c).length}/${c.setBoyu}${p.setTam(c) ? ' ✓' : ''}',
-          altBaslik: 'kira ${p.kira(c)}M',
+          ustBaslik: '${c.kisaAdT} ${p.propsOf(c).length}/${c.setBoyu}${p.setTam(c) ? ' ✓' : ''}',
+          altBaslik: t('kira {n}M', {'n': p.kira(c)}),
           vurgu: p.setTam(c),
           renk: c.renk,
           onTap: () => setState(() => _acikDeste = _acikDeste == '$kim:${c.name}' ? null : '$kim:${c.name}'),
@@ -1218,7 +1394,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       color: Colors.black38,
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Elin (${ben.hand.length}/7)', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
+        Text(t('Elin ({n}/7)', {'n': ben.hand.length}), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
         const SizedBox(height: 4),
         SizedBox(
           key: _kBenEl,

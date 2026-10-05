@@ -1,10 +1,40 @@
-import 'dart:math' show pi;
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../model/cards.dart';
+import '../dil.dart';
 
-/// Tek kart görseli — fiziksel kart oyunlarına yakın dil:
-/// renkli başlık bandı, sol üstte değer rozeti, ortada büyük simge, altta kısa açıklama.
-/// [w] genişlik; yükseklik 1.45×.
+const _krem = Color(0xFFFBF6E9);
+const _kahve = Color(0xFF2B2113);
+const _altin = Color(0xFFC9A227);
+const _soluk = Color(0xFF7A6A4A);
+const _gok = [Color(0xFFD9342B), Color(0xFFF08A24), Color(0xFFF2D53C), Color(0xFF1E9E4A), Color(0xFF3FC1C9), Color(0xFF1F3F9E), Color(0xFFB03A9E)];
+const _silAd = {
+  PColor.brown: 'gaziantep',
+  PColor.lightBlue: 'adana',
+  PColor.pink: 'konya',
+  PColor.orange: 'antalya',
+  PColor.red: 'bursa',
+  PColor.yellow: 'izmir',
+  PColor.green: 'ankara',
+  PColor.darkBlue: 'istanbul',
+  PColor.railroad: 'ulasim',
+  PColor.utility: 'altyapi',
+};
+
+double _lum(Color c) => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+Color _yazi(Color c) => _lum(c) > 0.62 ? _kahve : Colors.white;
+Color _tint(Color c) => _lum(c) > 0.55 ? Color.lerp(c, Colors.black, 0.38)! : c;
+String _buyuk(String s) => Dil.o.en ? s.toUpperCase() : s.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
+
+Text _x(String s, double fs, {Color color = _kahve, FontWeight fw = FontWeight.w700, double ls = 0, double h = 1.2, TextAlign? al, int? max, List<Shadow>? sh}) => Text(
+      s,
+      textAlign: al,
+      maxLines: max,
+      overflow: max == null ? null : TextOverflow.ellipsis,
+      style: TextStyle(fontSize: fs, color: color, fontWeight: fw, letterSpacing: ls, height: h, shadows: sh, decoration: TextDecoration.none),
+    );
+
+/// Tek kart görseli. Tasarım 180×260 ölçüsünde çizilir, [w] genişliğine ölçeklenir (yükseklik 1.45×).
 class CardView extends StatelessWidget {
   const CardView(this.card, {super.key, this.w = 72, this.selected = false, this.onTap, this.dim = false});
   final GameCard card;
@@ -13,63 +43,31 @@ class CardView extends StatelessWidget {
   final bool dim;
   final VoidCallback? onTap;
 
-  static const _krem = Color(0xFFFBF6E9);
+  static const double _tw = 180, _th = 260;
 
   @override
   Widget build(BuildContext context) {
-    final h = w * 1.45;
     final body = Container(
       width: w,
-      height: h,
+      height: w * 1.45,
       decoration: BoxDecoration(
-        color: _krem,
-        borderRadius: BorderRadius.circular(w * 0.09),
-        border: Border.all(color: selected ? Colors.amber : Colors.black38, width: selected ? 3 : 1),
-        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 3, offset: Offset(1, 2))],
+        borderRadius: BorderRadius.circular(w * 0.078),
+        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(1, 2))],
+      ),
+      foregroundDecoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(w * 0.078),
+        border: Border.all(color: selected ? Colors.amber : Colors.black26, width: selected ? 3 : 1),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Stack(children: [
-        if (card.isMoney)
-          Positioned.fill(child: CustomPaint(painter: _CercevePainter(card.value, merkez: true)))
-        else if (card.isAction || card.isRent) ...[
-          Positioned.fill(child: CustomPaint(painter: _CercevePainter(card.paraDegeri, merkez: false, zeminAcik: true))),
-          Positioned.fill(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(w * 0.14, w * 0.17, w * 0.14, w * 0.17),
-              child: card.isAction ? _aksiyon() : _kira(),
-            ),
-          ),
-        ] else ...[
-          Positioned.fill(child: CustomPaint(painter: _tapuCercevesi())),
-          Positioned.fill(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(w * 0.13, w * 0.12, w * 0.13, w * 0.12),
-              child: _icerik(),
-            ),
-          ),
-        ],
-      ]),
+      child: FittedBox(
+        fit: BoxFit.fill,
+        child: SizedBox(width: _tw, height: _th, child: _govde()),
+      ),
     );
     return GestureDetector(onTap: onTap, child: Opacity(opacity: dim ? 0.45 : 1, child: body));
   }
 
-  double get _fs => w / 7.5;
-
-  _CercevePainter _tapuCercevesi() {
-    const siyah = Color(0xFF6B6B6B);
-    if (card.isMultiWild) {
-      return _CercevePainter(0, merkez: false, zemin: const Color(0xFFFBF6E9), cerceve: siyah, koseUst: const Color(0xFF1F3F9E), koseAlt: const Color(0xFF1F3F9E));
-    }
-    if (card.isWild) {
-      final a = card.colors[0], b = card.colors[1];
-      final ust = card.wildColor == b ? b : a, alt = ust == a ? b : a;
-      return _CercevePainter(card.paraDegeri, merkez: false, zemin: const Color(0xFFFBF6E9), cerceve: siyah, koseUst: ust.renk, koseAlt: alt.renk);
-    }
-    final r = card.color!.renk;
-    return _CercevePainter(card.paraDegeri, merkez: false, zemin: const Color(0xFFFBF6E9), cerceve: siyah, koseUst: r, koseAlt: r);
-  }
-
-  Widget _icerik() {
+  Widget _govde() {
     switch (card.kind) {
       case CardKind.money:
         return _para();
@@ -84,198 +82,310 @@ class CardView extends StatelessWidget {
     }
   }
 
-  // ------------------------------------------------------------ para
-  Widget _para() => const SizedBox();
-
-  // ------------------------------------------------------------ tapu
-  /// Renkli başlık bandı (sokak adı / JOKER TAPU).
-  Widget _bant(Color c, String ad, {String? alt, bool ters = false, double yuk = 0.26}) {
-    final icerik = Container(
-      width: double.infinity,
-      height: w * yuk,
-      decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(w * 0.03)),
+  // ------------------------------------------------------------ ortak parçalar
+  Widget _rozet(int v, {bool ters = false}) {
+    if (v <= 0) return const SizedBox.shrink();
+    final c = paraRengi(v);
+    final daire = Container(
+      width: 38,
+      height: 38,
       alignment: Alignment.center,
-      padding: EdgeInsets.symmetric(horizontal: w * 0.03),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(ad.toUpperCase(),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              style: TextStyle(fontSize: _fs * 0.82, fontWeight: FontWeight.w900, color: _koyu(c) ? Colors.white : Colors.black87, height: 1.05, letterSpacing: 0.3)),
-          if (alt != null) Text(alt, style: TextStyle(fontSize: _fs * 0.5, color: _koyu(c) ? Colors.white : Colors.black87, height: 1.1)),
-        ]),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: c,
+        border: Border.all(color: _krem, width: 2.5),
+        boxShadow: const [BoxShadow(color: Color(0x80000000), blurRadius: 5, offset: Offset(0, 2))],
       ),
+      child: _x('${v}M', 14, color: v == 1 ? _kahve : Colors.white, fw: FontWeight.w900, ls: -0.5, h: 1, sh: v == 1 ? null : const [Shadow(color: Color(0x55000000), blurRadius: 2, offset: Offset(0, 1))]),
     );
-    return ters ? Transform.rotate(angle: pi, child: icerik) : icerik;
-  }
-
-  /// Küçük tapu destesi simgesi: n kart üst üste, önde sayı.
-  Widget _desteSimge(Color c, int n, double b) {
-    return SizedBox(
-      width: b * 1.5,
-      height: b * 1.25,
-      child: Stack(children: [
-        for (var i = n - 1; i >= 0; i--)
-          Positioned(
-            left: (n - 1 - i) * b * 0.16,
-            top: i * b * 0.08,
-            child: Container(
-              width: b,
-              height: b * 1.15,
-              decoration: BoxDecoration(
-                color: c,
-                borderRadius: BorderRadius.circular(b * 0.14),
-                border: Border.all(color: Colors.white, width: b * 0.06),
-              ),
-              alignment: Alignment.bottomCenter,
-              child: i == 0
-                  ? Container(
-                      width: b * 0.72,
-                      height: b * 0.5,
-                      margin: EdgeInsets.only(bottom: b * 0.08),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(b * 0.08)),
-                      alignment: Alignment.center,
-                      child: Text('$n', style: TextStyle(fontSize: b * 0.42, fontWeight: FontWeight.w900, color: Colors.black87, height: 1)),
-                    )
-                  : null,
-            ),
-          ),
-      ]),
+    return Positioned(
+      left: ters ? null : 7,
+      top: ters ? null : 7,
+      right: ters ? 7 : null,
+      bottom: ters ? 7 : null,
+      child: ters ? RotatedBox(quarterTurns: 2, child: daire) : daire,
     );
   }
 
-  /// Kira tablosu: sahip olunan tapu sayısı → kira.
-  Widget _kiraTablosu(PColor c, {bool kompakt = false}) {
-    final b = w * (kompakt ? 0.11 : 0.13);
-    final satirlar = <Widget>[];
-    for (var i = 0; i < c.kira.length; i++) {
-      satirlar.add(Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, crossAxisAlignment: CrossAxisAlignment.center, children: [
-        _desteSimge(c.renk, i + 1, b),
+  Widget _sil(PColor c) => Image.asset(
+        'assets/siluet/${_silAd[c]}.png',
+        color: _tint(c.renk),
+        colorBlendMode: BlendMode.srcIn,
+        fit: BoxFit.contain,
+        alignment: Alignment.bottomCenter,
+        filterQuality: FilterQuality.medium,
+      );
+
+  Widget _satir(String l, int v, {bool soluk = false, double fs = 10.5}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1.5),
+        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          _x(l, soluk ? fs - 1 : fs, color: soluk ? _soluk : _kahve, fw: FontWeight.w500, h: 1.15),
+          _x('${v}M', soluk ? fs - 1 : fs, fw: FontWeight.w800, h: 1.15),
+        ]),
+      );
+
+  String _kiraEtiket(PColor c, int j) {
+    if (c == PColor.railroad) return t('{n} ulaşım tapusu', {'n': j + 1});
+    if (c == PColor.utility) return t('{n} altyapı tapusu', {'n': j + 1});
+    if (j == 0) return t('Tek tapu');
+    if (j + 1 == c.setBoyu) return t('{n} tapu (tam set)', {'n': j + 1});
+    return t('{n} tapu', {'n': j + 1});
+  }
+
+  // ------------------------------------------------------------ mülk
+  Widget _tapu(PColor c) {
+    final kira = c.kira;
+    final ad = card.sokak != null ? t(card.sokak!) : c.adT;
+    final sehir = _buyuk(t(c.sehir));
+    final etiket = c.binaOlur ? t('TAPU SENEDİ · {s}', {'s': sehir}) : t('{s} TAPUSU', {'s': sehir});
+    final tam = kira.last;
+    return Stack(children: [
+      Container(color: _krem),
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Container(
+          height: 64,
+          color: c.renk,
+          padding: const EdgeInsets.fromLTRB(54, 8, 8, 6),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _x(etiket, 8.5, color: _yazi(c.renk), ls: 1, max: 1),
+            const SizedBox(height: 2),
+            _x(ad, ad.length > 11 ? 12.5 : 15, color: _yazi(c.renk), fw: FontWeight.w800, h: 1.1, max: 2),
+          ]),
+        ),
+        Container(height: 54, margin: const EdgeInsets.fromLTRB(10, 5, 10, 0), child: _sil(c)),
         Expanded(
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: w * 0.02),
-            child: CustomPaint(painter: _NoktaCizgi(), child: const SizedBox(height: 1)),
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: 156,
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                  _x(t('KİRA BEDELİ'), 8.5, color: _soluk, ls: 1),
+                  Container(height: 1, margin: const EdgeInsets.only(top: 2, bottom: 2), color: const Color(0x332B2113)),
+                  for (var j = 0; j < kira.length; j++) _satir(_kiraEtiket(c, j), kira[j]),
+                  if (c.binaOlur) ...[
+                    _satir(t('Tam set + Ev'), tam + 3, soluk: true),
+                    _satir(t('+ Ev + Rezidans'), tam + 7, soluk: true),
+                  ],
+                ]),
+              ),
+            ),
           ),
         ),
-        Text('M${c.kira[i]}', style: TextStyle(fontSize: _fs * 0.8, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.black87, height: 1)),
-      ]));
-    }
-    return Column(mainAxisSize: MainAxisSize.min, children: [
-      if (!kompakt)
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text('SAHİP OLUNAN\nTAPU SENEDİ\nSAYISI', style: TextStyle(fontSize: _fs * 0.42, fontWeight: FontWeight.w800, color: Colors.black87, height: 1.05)),
-          Text('KİRA', style: TextStyle(fontSize: _fs * 0.42, fontWeight: FontWeight.w800, color: Colors.black87)),
+      ]),
+      _rozet(card.paraDegeri),
+    ]);
+  }
+
+  // ------------------------------------------------------------ joker mülk
+  Widget _yari(PColor c, {required bool ters}) {
+    final kira = c.kira;
+    final renkYazi = _yazi(c.renk);
+    final govde = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Container(
+        height: 64,
+        color: c.renk,
+        padding: EdgeInsets.fromLTRB(ters ? 10 : 54, 8, ters ? 54 : 10, 6),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _x(t('JOKER · {s}', {'s': _buyuk(t(c.sehir))}), 8.5, color: renkYazi, ls: 1, max: 1),
+          const SizedBox(height: 2),
+          _x(c.adT, 15, color: renkYazi, fw: FontWeight.w800, h: 1.1, max: 1),
         ]),
-      SizedBox(height: w * 0.02),
-      ...satirlar.expand((r) => [r, SizedBox(height: w * 0.02)]),
-      Text('TAM SET', style: TextStyle(fontSize: _fs * 0.42, fontWeight: FontWeight.w800, color: Colors.black87)),
-    ]);
-  }
-
-  Widget _tapu(PColor c) {
-    return Column(children: [
-      _bant(c.renk, card.sokak ?? c.ad, yuk: 0.3),
-      Padding(
-        padding: EdgeInsets.only(top: w * 0.015),
-        child: Text(c.sehir.toUpperCase(), style: TextStyle(fontSize: _fs * 0.5, fontWeight: FontWeight.w900, letterSpacing: 1, color: Colors.black54)),
       ),
-      SizedBox(height: w * 0.015),
-      Expanded(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.topCenter, child: SizedBox(width: w * 0.74, child: _kiraTablosu(c)))),
+      Expanded(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: 156,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                for (var j = 0; j < kira.length; j++) _satir(t('{n} tapu', {'n': j + 1}), kira[j], fs: 10),
+              ]),
+            ),
+          ),
+        ),
+      ),
     ]);
+    return ters ? RotatedBox(quarterTurns: 2, child: govde) : govde;
   }
 
-  /// İkili joker: seçili renk üstte; tablolar yan yana, alttaki yarı 180° ters (orijinal kart).
   Widget _ikiliJoker() {
     final a = card.colors[0], b = card.colors[1];
     final ust = card.wildColor == b ? b : a;
     final alt = ust == a ? b : a;
     final secili = card.wildColor != null;
-    return Column(children: [
-      _bant(ust.renk, 'Joker Tapu\nSenedi Kartı', alt: 'Renklerden birini seç', yuk: 0.3),
-      SizedBox(height: w * 0.02),
-      Expanded(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.center, child: SizedBox(width: w * 0.7, child: _kiraTablosu(ust, kompakt: true)))),
-      SizedBox(height: w * 0.02),
-      Opacity(opacity: secili ? 0.55 : 1, child: _bant(alt.renk, 'Joker Tapu\nSenedi Kartı', alt: 'Renklerden birini seç', ters: true, yuk: 0.3)),
+    return Stack(children: [
+      Container(color: _krem),
+      Column(children: [
+        Expanded(child: _yari(ust, ters: false)),
+        Container(
+          height: 2,
+          decoration: const BoxDecoration(gradient: LinearGradient(colors: [Color(0x00C9A227), _altin, _altin, Color(0x00C9A227)], stops: [0, 0.18, 0.82, 1])),
+        ),
+        Expanded(child: Opacity(opacity: secili ? 0.6 : 1, child: _yari(alt, ters: true))),
+      ]),
+      Positioned(
+        top: 120,
+        left: 0,
+        right: 0,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            decoration: BoxDecoration(
+              color: _krem,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _altin, width: 1.5),
+              boxShadow: const [BoxShadow(color: Color(0x44000000), blurRadius: 3, offset: Offset(0, 1))],
+            ),
+            child: _x('✦ JOKER ✦', 8, color: const Color(0xFF8A6A14), fw: FontWeight.w900, ls: 2, h: 1.3),
+          ),
+        ),
+      ),
+      _rozet(card.paraDegeri),
+      _rozet(card.paraDegeri, ters: true),
     ]);
   }
 
   Widget _cokJoker() {
-    const gok = LinearGradient(colors: [Colors.red, Colors.orange, Colors.yellow, Colors.green, Colors.blue, Colors.purple]);
-    return Column(children: [
-      Container(
-        width: double.infinity,
-        height: w * 0.3,
-        decoration: BoxDecoration(gradient: gok, borderRadius: BorderRadius.circular(w * 0.03)),
-        alignment: Alignment.center,
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text('JOKER TAPU\nSENEDİ KARTI', textAlign: TextAlign.center, style: TextStyle(fontSize: _fs * 0.8, fontWeight: FontWeight.w900, color: Colors.white, height: 1.05, shadows: const [Shadow(blurRadius: 3, color: Colors.black54)])),
+    const gok = LinearGradient(colors: _gok, begin: Alignment(-1, -0.3), end: Alignment(1, 0.3));
+    return Stack(children: [
+      Container(color: _krem),
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Container(
+          height: 64,
+          decoration: const BoxDecoration(gradient: gok),
+          padding: const EdgeInsets.fromLTRB(54, 8, 8, 6),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _x(t('JOKER TAPU'), 8.5, color: Colors.white, ls: 1, sh: const [Shadow(color: Color(0xAA000000), blurRadius: 3)]),
+            const SizedBox(height: 2),
+            _x(t('Her renk'), 15, color: Colors.white, fw: FontWeight.w800, h: 1.1, sh: const [Shadow(color: Color(0xAA000000), blurRadius: 3)]),
+          ]),
         ),
-      ),
-      Expanded(
-        child: Center(
-          child: card.wildColor == null
-              ? Text('Bu kart herhangi bir renk\ngrubunda tapu olarak\nkullanılabilir.', textAlign: TextAlign.center, style: TextStyle(fontSize: _fs * 0.6, height: 1.15, color: Colors.black87))
-              : Container(
-                  margin: EdgeInsets.all(w * 0.04),
-                  padding: EdgeInsets.all(w * 0.04),
-                  decoration: BoxDecoration(color: card.wildColor!.renk, borderRadius: BorderRadius.circular(6)),
-                  child: Text('▲ ${card.wildColor!.ad}',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: _fs * 0.78, fontWeight: FontWeight.w800, color: _koyu(card.wildColor!.renk) ? Colors.white : Colors.black87)),
-                ),
+        Container(
+          height: 54,
+          margin: const EdgeInsets.fromLTRB(10, 5, 10, 0),
+          child: ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: (r) => const LinearGradient(colors: _gok).createShader(r),
+            child: Image.asset('assets/siluet/istanbul.png', color: Colors.white, colorBlendMode: BlendMode.srcIn, fit: BoxFit.contain, alignment: Alignment.bottomCenter),
+          ),
         ),
-      ),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: card.wildColor == null
+                ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    _x(t('Her renkli set'), 12, fw: FontWeight.w800),
+                    const SizedBox(height: 3),
+                    _x(t('Bu kartı dilediğin renkli setin yerine koy. Rengini sonradan değiştirebilirsin. Tek başına para değeri yoktur.'), 10.5, fw: FontWeight.w500, h: 1.35),
+                  ])
+                : Align(
+                    alignment: Alignment.topCenter,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(color: card.wildColor!.renk, borderRadius: BorderRadius.circular(8)),
+                      child: _x('▲ ${card.wildColor!.adT}', 14, color: _yazi(card.wildColor!.renk), fw: FontWeight.w800),
+                    ),
+                  ),
+          ),
+        ),
+      ]),
     ]);
   }
 
+  // ------------------------------------------------------------ para
+  static const _paraAd = {1: 'BİR MİLYON', 2: 'İKİ MİLYON', 3: 'ÜÇ MİLYON', 4: 'DÖRT MİLYON', 5: 'BEŞ MİLYON', 10: 'ON MİLYON'};
+
+  Widget _para() {
+    final v = card.value;
+    final golge = [const Shadow(color: Color(0x66000000), blurRadius: 4, offset: Offset(0, 2))];
+    return Container(
+      decoration: BoxDecoration(color: paraRengi(v), border: Border.all(color: _krem, width: 6)),
+      child: Stack(children: [
+        Positioned.fill(
+          child: Container(
+            margin: const EdgeInsets.all(0),
+            decoration: BoxDecoration(border: Border.all(color: const Color(0x88FFFFFF), width: 1.5), borderRadius: BorderRadius.circular(8)),
+          ),
+        ),
+        Positioned(left: 12, top: 9, child: _x('${v}M', 20, color: Colors.white, fw: FontWeight.w900, h: 1, sh: golge)),
+        Positioned(right: 12, bottom: 9, child: _x('${v}M', 20, color: Colors.white, fw: FontWeight.w900, h: 1, sh: golge)),
+        Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            _x('${v}M', 46, color: Colors.white, fw: FontWeight.w900, h: 1, sh: golge),
+            const SizedBox(height: 6),
+            _x(t(_paraAd[v] ?? '${v}M'), 9, color: Colors.white, ls: 2, sh: golge),
+          ]),
+        ),
+      ]),
+    );
+  }
+
   // ------------------------------------------------------------ aksiyon
-  static const _aksiyonTema = {
-    ActionType.dealBreaker: (Color(0xFFB71C1C), Icons.gavel),
-    ActionType.justSayNo: (Color(0xFF1565C0), Icons.block),
-    ActionType.slyDeal: (Color(0xFF00796B), Icons.back_hand),
-    ActionType.forcedDeal: (Color(0xFFEF6C00), Icons.swap_horiz),
-    ActionType.tahsilat: (Color(0xFF6A1B9A), Icons.request_quote),
-    ActionType.birthday: (Color(0xFFD81B60), Icons.cake),
-    ActionType.passGo: (Color(0xFF2E7D32), Icons.double_arrow),
-    ActionType.house: (Color(0xFF6D4C41), Icons.home),
-    ActionType.hotel: (Color(0xFF283593), Icons.apartment),
-    ActionType.doubleRent: (Color(0xFFF9A825), Icons.close),
+  static const _emoji = {
+    ActionType.dealBreaker: '⚖️',
+    ActionType.slyDeal: '📜',
+    ActionType.forcedDeal: '🔁',
+    ActionType.tahsilat: '📑',
+    ActionType.birthday: '🎉',
+    ActionType.house: '🏠',
+    ActionType.hotel: '🏢',
   };
+
+  Widget _ikon(ActionType a, Color c) {
+    switch (a) {
+      case ActionType.justSayNo:
+        return CustomPaint(size: const Size(66, 66), painter: _BlokPainter(c));
+      case ActionType.doubleRent:
+        return SizedBox(
+          width: 76,
+          height: 66,
+          child: Stack(clipBehavior: Clip.none, children: [
+            CustomPaint(size: const Size(76, 64), painter: _ZamPainter(c)),
+            Positioned(right: 0, bottom: -4, child: _x('x2', 26, color: c, fw: FontWeight.w900, h: 1)),
+          ]),
+        );
+      case ActionType.passGo:
+        return CustomPaint(size: const Size(64, 64), painter: _IkiKartPainter(c));
+      default:
+        return Text(_emoji[a] ?? '', style: const TextStyle(fontSize: 52, height: 1.2, decoration: TextDecoration.none));
+    }
+  }
 
   Widget _aksiyon() {
     final a = card.action!;
-    final (renk, ikon) = _aksiyonTema[a]!;
-    final cerceve = paraRengi(card.paraDegeri);
-    final koyu = Color.lerp(cerceve, Colors.black, 0.35)!;
-    return Column(children: [
-      FittedBox(fit: BoxFit.scaleDown, child: Text('HAMLE KARTI', maxLines: 1, style: TextStyle(fontSize: _fs * 0.74, fontWeight: FontWeight.w900, letterSpacing: 0.6, color: koyu))),
-      Expanded(
-        child: Center(
+    final c = paraRengi(card.paraDegeri);
+    final gelistirme = a == ActionType.house || a == ActionType.hotel;
+    return Container(
+      color: const Color(0xFF1C2430),
+      child: Stack(children: [
+        Positioned.fill(
           child: Container(
-            width: w * 0.36,
-            height: w * 0.36,
-            decoration: BoxDecoration(color: renk.withValues(alpha: 0.12), shape: BoxShape.circle, border: Border.all(color: renk, width: 1.5)),
-            child: a == ActionType.doubleRent
-                ? Center(child: Text('×2', style: TextStyle(fontSize: w * 0.17, fontWeight: FontWeight.w900, color: renk)))
-                : Icon(ikon, color: renk, size: w * 0.23),
+            margin: const EdgeInsets.all(6),
+            decoration: BoxDecoration(border: Border.all(color: c, width: 1.5), borderRadius: BorderRadius.circular(9)),
           ),
         ),
-      ),
-      Text(a.ad.toUpperCase(),
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          style: TextStyle(fontSize: _fs * 0.8, fontWeight: FontWeight.w900, color: koyu, height: 1.05, letterSpacing: 0.3)),
-      Padding(
-        padding: EdgeInsets.only(top: w * 0.015),
-        child: Text(a.aciklama,
-            textAlign: TextAlign.center,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: _fs * 0.56, height: 1.1, color: Colors.black87)),
-      ),
-    ]);
+        Positioned(top: 19, left: 0, right: 0, child: Center(child: _x(t(gelistirme ? 'GELİŞTİRME' : 'AKSİYON'), 9, color: c, ls: 2))),
+        Positioned(top: 56, left: 0, right: 0, height: 70, child: Center(child: _ikon(a, c))),
+        Positioned(
+          top: 138,
+          left: 12,
+          right: 12,
+          child: FittedBox(fit: BoxFit.scaleDown, child: _x(a.adT, 19, color: c, fw: FontWeight.w800, h: 1.2)),
+        ),
+        Positioned(
+          top: 172,
+          left: 16,
+          right: 16,
+          child: _x(a.aciklamaT, 11, color: const Color(0xFFDDDDEE), fw: FontWeight.w500, h: 1.4, al: TextAlign.center, max: 4),
+        ),
+        _rozet(card.paraDegeri),
+      ]),
+    );
   }
 
   // ------------------------------------------------------------ kira
@@ -283,129 +393,164 @@ class CardView extends StatelessWidget {
     final joker = card.isWildRent;
     final a = joker ? null : card.rentColors[0];
     final b = joker ? null : card.rentColors[1];
-    final koyu = Color.lerp(paraRengi(card.paraDegeri), Colors.black, 0.35)!;
-    final bayrak = SizedBox(
-      width: w * 0.42,
-      height: w * 0.30,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(4),
-        child: joker
-            ? const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.red, Colors.orange, Colors.yellow, Colors.green, Colors.blue, Colors.purple])))
-            : Column(children: [Expanded(child: Container(color: a!.renk)), Expanded(child: Container(color: b!.renk))]),
+    final disk = Container(
+      width: 104,
+      height: 104,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: _krem, width: 5),
+        boxShadow: const [BoxShadow(color: _kahve, spreadRadius: 2.5), BoxShadow(color: Color(0x44000000), blurRadius: 10, offset: Offset(0, 4))],
+      ),
+      child: ClipOval(
+        child: Stack(alignment: Alignment.center, children: [
+          Positioned.fill(child: CustomPaint(painter: _DiskPainter(a?.renk, b?.renk))),
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: _kahve, border: Border.all(color: _krem, width: 3)),
+            child: const Icon(Icons.home_outlined, color: _krem, size: 34),
+          ),
+        ]),
       ),
     );
-    return Column(children: [
-      FittedBox(fit: BoxFit.scaleDown, child: Text('HAMLE KARTI', maxLines: 1, style: TextStyle(fontSize: _fs * 0.74, fontWeight: FontWeight.w900, letterSpacing: 0.6, color: koyu))),
-      Expanded(child: Center(child: bayrak)),
-      Text('KİRA', style: TextStyle(fontSize: _fs * 0.8, fontWeight: FontWeight.w900, color: koyu, height: 1.05, letterSpacing: 0.3)),
-      Padding(
-        padding: EdgeInsets.only(top: w * 0.015),
-        child: Text(joker ? 'Herhangi bir rengin kirasını herkesten al.' : '${a!.kisaAd} veya ${b!.kisaAd} kirasını herkesten al.',
-            textAlign: TextAlign.center,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: _fs * 0.56, height: 1.1, color: Colors.black87)),
+    Widget chip(Widget nokta, String ad) => Row(mainAxisSize: MainAxisSize.min, children: [
+          nokta,
+          const SizedBox(width: 4),
+          _x(ad, 10.5, fw: FontWeight.w700),
+        ]);
+    Widget nokta(Color c) => Container(width: 11, height: 11, decoration: BoxDecoration(shape: BoxShape.circle, color: c, border: Border.all(color: _kahve, width: 1.5)));
+    return Stack(children: [
+      Container(color: _krem),
+      Positioned.fill(
+        child: Container(
+          margin: const EdgeInsets.all(6),
+          decoration: BoxDecoration(border: Border.all(color: const Color(0x332B2113), width: 1.5), borderRadius: BorderRadius.circular(9)),
+        ),
       ),
+      Positioned(top: 19, left: 0, right: 0, child: Center(child: _x(t(joker ? 'JOKER KİRA' : 'KİRA'), 9, color: _soluk, ls: 2))),
+      Positioned(top: 58, left: 0, right: 0, child: Center(child: disk)),
+      Positioned(
+        top: 176,
+        left: 10,
+        right: 10,
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 2,
+          children: joker
+              ? [
+                  chip(
+                    Container(
+                      width: 11,
+                      height: 11,
+                      decoration: BoxDecoration(shape: BoxShape.circle, gradient: const SweepGradient(colors: [..._gok, Color(0xFFD9342B)]), border: Border.all(color: _kahve, width: 1.5)),
+                    ),
+                    t('Her renk'),
+                  ),
+                ]
+              : [chip(nokta(a!.renk), a.adT), chip(nokta(b!.renk), b.adT)],
+        ),
+      ),
+      Positioned(
+        top: 204,
+        left: 12,
+        right: 12,
+        child: Column(children: [
+          _x(t('HERKESTEN'), 14, fw: FontWeight.w800, ls: 1, h: 1.2),
+          const SizedBox(height: 2),
+          _x(joker ? t('istediğin renkten kira al') : t('kira al'), 11, fw: FontWeight.w500, h: 1.35, al: TextAlign.center),
+        ]),
+      ),
+      _rozet(card.paraDegeri),
     ]);
   }
-
-  bool _koyu(Color c) => c.computeLuminance() < 0.45;
 }
 
-
-/// Para kartı: açık zemin, renkli süslü çift çerçeve, köşelerde baklava (alttakiler ters),
-/// ortada degrade büyük baklava içinde değer. (Orijinal kart düzeni, karakter yok.)
-class _CercevePainter extends CustomPainter {
-  _CercevePainter(this.deger, {this.merkez = true, this.zeminAcik = false, this.zemin, this.cerceve, this.koseUst, this.koseAlt});
-  final int deger;
-  final bool merkez;
-  final bool zeminAcik;
-  final Color? zemin, cerceve, koseUst, koseAlt;
-
+class _BlokPainter extends CustomPainter {
+  _BlokPainter(this.c);
+  final Color c;
   @override
-  void paint(Canvas c, Size sz) {
-    final w = sz.width, h = sz.height;
-    final renk = paraRengi(deger);
-    final koyu = Color.lerp(renk, Colors.black, 0.35)!;
-    final acik = Color.lerp(renk, Colors.white, 0.25)!;
-    final zeminR = zemin ?? Color.lerp(renk, Colors.white, zeminAcik ? 0.93 : 0.80)!;
-    final cer = cerceve ?? renk;
-    final rr = RRect.fromRectAndRadius(Offset.zero & sz, Radius.circular(w * 0.09));
-    c.drawRRect(rr, Paint()..color = zeminR);
-    // dış ve iç çerçeve
-    final d1 = w * 0.07, d2 = w * 0.115;
-    final r1 = Rect.fromLTWH(d1, d1, w - 2 * d1, h - 2 * d1);
-    final r2 = Rect.fromLTWH(d2, d2, w - 2 * d2, h - 2 * d2);
-    c.drawRect(r1, Paint()..color = cer..style = PaintingStyle.stroke..strokeWidth = w * 0.022);
-    c.drawRect(r2, Paint()..color = cer..style = PaintingStyle.stroke..strokeWidth = w * 0.010);
-    // iki çerçeve arasında zincir deseni (küçük halkalar)
-    final halka = Paint()..color = cer..style = PaintingStyle.stroke..strokeWidth = w * 0.008;
-    final orta = (d1 + d2) / 2, adim = w * 0.045, rad = w * 0.013;
-    for (var x = d2 + adim; x < w - d2; x += adim) {
-      c.drawCircle(Offset(x, orta), rad, halka);
-      c.drawCircle(Offset(x, h - orta), rad, halka);
-    }
-    for (var y = d2 + adim; y < h - d2; y += adim) {
-      c.drawCircle(Offset(orta, y), rad, halka);
-      c.drawCircle(Offset(w - orta, y), rad, halka);
-    }
-    // köşe baklavaları (çerçeve kesişimine oturur)
-    final ks = w * 0.15;
-    final etiket = deger == 0 ? 'M' : 'M$deger';
-    for (final (cx, cy, ters) in [(d1, d1, false), (w - d1, d1, false), (d1, h - d1, true), (w - d1, h - d1, true)]) {
-      final kr = ters ? (koseAlt ?? koseUst ?? koyu) : (koseUst ?? koyu);
-      _baklava(c, Offset(cx, cy), ks, kr, kr, etiket, w * 0.075, ters);
-    }
-    // merkez baklava (para)
-    if (merkez) _baklava(c, Offset(w / 2, h / 2), w * 0.44, acik, koyu, 'M$deger', w * 0.19, false, degrade: true);
+  void paint(Canvas cv, Size s) {
+    final k = s.width / 64;
+    final p = Paint()..color = c..style = PaintingStyle.stroke..strokeWidth = 7 * k..strokeCap = StrokeCap.round;
+    cv.drawCircle(Offset(32 * k, 32 * k), 24 * k, p);
+    cv.drawLine(Offset(15 * k, 49 * k), Offset(49 * k, 15 * k), p);
   }
 
-  void _baklava(Canvas c, Offset m, double s, Color a, Color b, String yazi, double fs, bool ters, {bool degrade = false}) {
-    final yol = Path()
-      ..moveTo(m.dx, m.dy - s / 2)
-      ..lineTo(m.dx + s / 2, m.dy)
-      ..lineTo(m.dx, m.dy + s / 2)
-      ..lineTo(m.dx - s / 2, m.dy)
-      ..close();
-    c.drawPath(yol, Paint()..color = degrade ? a : b);
-    c.drawPath(yol, Paint()..color = Colors.white..style = PaintingStyle.stroke..strokeWidth = s * 0.05);
-    if (degrade) {
-      // iç baklava koyu: açık dış kenar + koyu iç = orijinaldeki degrade hissi
-      final ic = Path()
-        ..moveTo(m.dx, m.dy - s * 0.42)
-        ..lineTo(m.dx + s * 0.42, m.dy)
-        ..lineTo(m.dx, m.dy + s * 0.42)
-        ..lineTo(m.dx - s * 0.42, m.dy)
-        ..close();
-      c.drawPath(ic, Paint()..color = b);
-      c.drawPath(ic, Paint()..color = Colors.white.withValues(alpha: 0.85)..style = PaintingStyle.stroke..strokeWidth = s * 0.02);
+  @override
+  bool shouldRepaint(covariant _BlokPainter o) => o.c != c;
+}
+
+class _ZamPainter extends CustomPainter {
+  _ZamPainter(this.c);
+  final Color c;
+  @override
+  void paint(Canvas cv, Size s) {
+    final p = Paint()..color = c..style = PaintingStyle.stroke..strokeWidth = 6..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
+    cv.drawPath(Path()..moveTo(4, 52)..lineTo(22, 34)..lineTo(32, 42)..lineTo(52, 18), p);
+    cv.drawPath(Path()..moveTo(40, 14)..lineTo(56, 14)..lineTo(56, 30), p);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ZamPainter o) => o.c != c;
+}
+
+class _IkiKartPainter extends CustomPainter {
+  _IkiKartPainter(this.c);
+  final Color c;
+  @override
+  void paint(Canvas cv, Size s) {
+    final k = s.width / 64;
+    cv.scale(k);
+    final cizgi = Paint()..color = c..style = PaintingStyle.stroke..strokeWidth = 3..strokeJoin = StrokeJoin.round;
+    void kart(Rect r, double derece, Offset eksen, {bool dolgu = false}) {
+      cv.save();
+      cv.translate(eksen.dx, eksen.dy);
+      cv.rotate(derece * math.pi / 180);
+      cv.translate(-eksen.dx, -eksen.dy);
+      final rr = RRect.fromRectAndRadius(r, const Radius.circular(4));
+      if (dolgu) cv.drawRRect(rr, Paint()..color = const Color(0xFF1C2430));
+      cv.drawRRect(rr, cizgi);
+      cv.restore();
     }
+
+    kart(const Rect.fromLTWH(9, 16, 26, 36), -12, const Offset(22, 34));
+    kart(const Rect.fromLTWH(26, 12, 26, 36), 10, const Offset(39, 30), dolgu: true);
     final tp = TextPainter(
-      text: TextSpan(text: yazi, style: TextStyle(fontFamily: 'Roboto', fontSize: fs, fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, color: Colors.white, height: 1)),
+      text: TextSpan(text: '+2', style: TextStyle(color: c, fontSize: 17, fontWeight: FontWeight.w900)),
       textDirection: TextDirection.ltr,
     )..layout();
-    c.save();
-    c.translate(m.dx, m.dy);
-    if (ters) c.rotate(pi);
-    tp.paint(c, Offset(-tp.width / 2, -tp.height / 2));
-    c.restore();
+    cv.save();
+    cv.translate(39, 30);
+    cv.rotate(10 * math.pi / 180);
+    tp.paint(cv, Offset(-tp.width / 2, 8 - tp.height / 2));
+    cv.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _CercevePainter old) => old.deger != deger || old.merkez != merkez || old.zeminAcik != zeminAcik || old.koseUst != koseUst || old.koseAlt != koseAlt || old.cerceve != cerceve;
+  bool shouldRepaint(covariant _IkiKartPainter o) => o.c != c;
 }
 
-class _NoktaCizgi extends CustomPainter {
+class _DiskPainter extends CustomPainter {
+  _DiskPainter(this.a, this.b);
+  final Color? a, b;
   @override
-  void paint(Canvas c, Size sz) {
-    final p = Paint()..color = Colors.black45..strokeWidth = 1;
-    for (var x = 0.0; x < sz.width; x += 4) {
-      c.drawLine(Offset(x, sz.height / 2), Offset(x + 2, sz.height / 2), p);
+  void paint(Canvas cv, Size s) {
+    final r = Offset.zero & s;
+    if (a == null || b == null) {
+      cv.drawRect(r, Paint()..shader = const SweepGradient(colors: [..._gok, Color(0xFFD9342B)], transform: GradientRotation(-math.pi / 2)).createShader(r));
+      return;
     }
+    cv.drawRect(r, Paint()..color = a!);
+    cv.save();
+    cv.translate(s.width / 2, s.height / 2);
+    cv.rotate(25 * math.pi / 180);
+    cv.drawRect(Rect.fromLTWH(0, -s.height, s.width, s.height * 2), Paint()..color = b!);
+    cv.restore();
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter old) => false;
+  bool shouldRepaint(covariant _DiskPainter o) => o.a != a || o.b != b;
 }
 
 /// Arka yüz (rakibin eli / deste).
@@ -416,28 +561,75 @@ class CardBack extends StatelessWidget {
   const CardBack({super.key, this.w = 40, this.stil});
   final double w;
   final String? stil;
+
+  // zemin, madalyon, madalyon yazısı
   static const _stiller = {
-    'klasik': [Color(0xFFB3202D), Color(0xFF7A1019)],
-    'kart_altin': [Color(0xFFE0B13A), Color(0xFF8A6210)],
-    'kart_gece': [Color(0xFF26407A), Color(0xFF0F1A3A)],
-    'kart_mermer': [Color(0xFFEDE6DA), Color(0xFF9A9088)],
+    'klasik': (Color(0xFF0F5A3A), Color(0xFFE8C35A), Color(0xFF3A2A05)),
+    'kart_altin': (Color(0xFF9A6E14), Color(0xFF3A2A05), Color(0xFFE8C35A)),
+    'kart_gece': (Color(0xFF16275A), Color(0xFFE8C35A), Color(0xFF3A2A05)),
+    'kart_mermer': (Color(0xFF9A9088), Color(0xFFFBF6E9), Color(0xFF3A3A44)),
   };
+
+  static Color zeminRengi(String? stil) => (_stiller[stil] ?? _stiller['klasik']!).$1;
+
   @override
-  Widget build(BuildContext context) => Container(
-        width: w,
-        height: w * 1.45,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: _stiller[stil ?? kartArkasiStili] ?? _stiller['klasik']!, begin: Alignment.topLeft, end: Alignment.bottomRight),
-          borderRadius: BorderRadius.circular(w * 0.09),
-          border: Border.all(color: Colors.black26),
+  Widget build(BuildContext context) {
+    final (zemin, madalyon, yazi) = _stiller[stil ?? kartArkasiStili] ?? _stiller['klasik']!;
+    return Container(
+      width: w,
+      height: w * 1.45,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(w * 0.078),
+        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 3, offset: Offset(1, 2))],
+      ),
+      foregroundDecoration: BoxDecoration(borderRadius: BorderRadius.circular(w * 0.078), border: Border.all(color: Colors.black26)),
+      clipBehavior: Clip.antiAlias,
+      child: FittedBox(
+        fit: BoxFit.fill,
+        child: SizedBox(
+          width: 180,
+          height: 260,
+          child: Container(
+            decoration: BoxDecoration(color: zemin, border: Border.all(color: _krem, width: 6)),
+            child: CustomPaint(
+              painter: _DamaPainter(),
+              child: Center(
+                child: Container(
+                  width: 104,
+                  height: 104,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: madalyon,
+                    border: Border.all(color: _krem, width: 4),
+                    boxShadow: const [BoxShadow(color: Color(0xFF8A6A14), spreadRadius: 3), BoxShadow(color: Color(0x88000000), blurRadius: 10, offset: Offset(0, 4))],
+                  ),
+                  child: _x('EMLAK\nDEAL', 20, color: yazi, fw: FontWeight.w900, ls: 1, h: 1.05, al: TextAlign.center),
+                ),
+              ),
+            ),
+          ),
         ),
-        alignment: Alignment.center,
-        child: Container(
-          width: w * 0.7,
-          height: w * 0.7 * 1.45,
-          decoration: BoxDecoration(border: Border.all(color: Colors.white38), borderRadius: BorderRadius.circular(w * 0.06)),
-          alignment: Alignment.center,
-          child: Text('ED', style: TextStyle(color: (stil ?? kartArkasiStili) == 'kart_mermer' ? Colors.black45 : Colors.white70, fontWeight: FontWeight.w900, fontSize: w / 3.5)),
-        ),
-      );
+      ),
+    );
+  }
 }
+
+class _DamaPainter extends CustomPainter {
+  @override
+  void paint(Canvas cv, Size s) {
+    final p = Paint()..color = const Color(0x14FFFFFF);
+    const k = 14.0;
+    for (var i = 0; i * k < s.height; i++) {
+      for (var j = 0; j * k < s.width; j++) {
+        if ((i + j).isEven) cv.drawRect(Rect.fromLTWH(j * k, i * k, k, k), p);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter old) => false;
+}
+
+/// Seçili kart arkası stilinin zemin rengi (deste kalınlık şeritleri için).
+Color kartArkasiZemin() => CardBack.zeminRengi(kartArkasiStili);

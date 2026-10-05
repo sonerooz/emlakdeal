@@ -1,0 +1,5 @@
+[Unit]
+Description=Emlak Deal sağlık + disk kontrolü
+[Service]
+Type=oneshot
+ExecStart=/opt/emlakdeal-deploy/healthcheck.sh

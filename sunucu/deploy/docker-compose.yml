@@ -1,0 +1,47 @@
+# Kullanım (sunucu/deploy içinden):  cp .env.example .env && nano .env && docker compose up -d --build
+name: emlakdeal
+services:
+  sunucu:
+    build:
+      context: ../..            # emlakdeal/ kökü
+      dockerfile: sunucu/deploy/Dockerfile
+    image: emlakdeal-sunucu:latest
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - veri:/data              # emlakdeal.db (+ -wal, -shm) burada
+    expose:
+      - "8765"                  # yalnız Caddy erişir; dışarı açılmaz
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/saglik"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [sunucu]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - ALAN_ADI=${ALAN_ADI:?ALAN_ADI .env içinde tanımlı olmalı}
+      - ACME_EPOSTA=${ACME_EPOSTA:?ACME_EPOSTA .env içinde tanımlı olmalı}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_veri:/data        # TLS sertifikaları - silme!
+      - caddy_ayar:/config
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  veri:
+  caddy_veri:
+  caddy_ayar:

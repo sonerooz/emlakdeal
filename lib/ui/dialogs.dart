@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../dil.dart';
 import '../model/cards.dart';
 import '../model/game.dart';
 import 'card_widget.dart';
@@ -42,12 +43,12 @@ Future<PickSonuc> pickCardsEx(
           width: double.maxFinite,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             if (altAciklama != null)
-              Padding(padding: const EdgeInsets.only(bottom: 6), child: Text(altAciklama, style: const TextStyle(fontSize: 13, color: Colors.black54))),
+              Padding(padding: const EdgeInsets.only(bottom: 6), child: Text(t(altAciklama), style: const TextStyle(fontSize: 13, color: Colors.black54))),
             if (needTotal != null)
-              Text('Gereken: ${needTotal}M · Seçilen: ${toplam}M',
+              Text(t('Gereken: {n}M · Seçilen: {m}M', {'n': needTotal, 'm': toplam}),
                   style: TextStyle(fontWeight: FontWeight.w700, color: ok ? Colors.green : Colors.red)),
             if (exact != null)
-              Text('$exact kart seç · Seçilen: ${secili.length}',
+              Text(t('{n} kart seç · Seçilen: {m}', {'n': exact, 'm': secili.length}),
                   style: TextStyle(fontWeight: FontWeight.w700, color: ok ? Colors.green : Colors.red)),
             const SizedBox(height: 8),
             Flexible(
@@ -57,11 +58,11 @@ Future<PickSonuc> pickCardsEx(
                     if (b.key.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 6, bottom: 4),
-                        child: Text('${b.key} (${b.value.length} kart · ${b.value.fold(0, (s, c) => s + c.paraDegeri)}M)',
+                        child: Text(t('{ad} ({n} kart · {m}M)', {'ad': t(b.key), 'n': b.value.length, 'm': b.value.fold<int>(0, (s, c) => s + c.paraDegeri)}),
                             style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
                       ),
                     if (b.value.isEmpty)
-                      const Padding(padding: EdgeInsets.only(bottom: 4), child: Text('— yok —', style: TextStyle(color: Colors.black45))),
+                      Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(t('— yok —'), style: const TextStyle(color: Colors.black45))),
                     Wrap(
                       spacing: 6,
                       runSpacing: 6,
@@ -91,7 +92,7 @@ Future<PickSonuc> pickCardsEx(
                   style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade700, side: BorderSide(color: Colors.red.shade700)),
                   onPressed: () => Navigator.pop(ctx, PickSonuc(const [], altBasildi: true)),
                   icon: const Icon(Icons.block),
-                  label: Text(altButon),
+                  label: Text(t(altButon)),
                 ),
               ),
               const SizedBox(height: 4),
@@ -99,8 +100,8 @@ Future<PickSonuc> pickCardsEx(
           ]),
         ),
         actions: [
-          if (iptalOlur) TextButton(onPressed: () => Navigator.pop(ctx, PickSonuc(const [], iptal: true)), child: const Text('Vazgeç')),
-          FilledButton(onPressed: ok ? () => Navigator.pop(ctx, PickSonuc(secili.toList())) : null, child: Text(onay)),
+          if (iptalOlur) TextButton(onPressed: () => Navigator.pop(ctx, PickSonuc(const [], iptal: true)), child: Text(t('Vazgeç'))),
+          FilledButton(onPressed: ok ? () => Navigator.pop(ctx, PickSonuc(secili.toList())) : null, child: Text(t(onay))),
         ],
       );
     }),
@@ -137,12 +138,12 @@ Future<PColor?> pickColor(BuildContext context, String title, List<PColor> secen
           for (final c in secenekler)
             ActionChip(
               avatar: CircleAvatar(backgroundColor: c.renk, radius: 9),
-              label: Text(altYazi == null ? c.ad : '${c.ad} ${altYazi(c)}'),
+              label: Text(altYazi == null ? c.adT : '${c.adT} ${altYazi(c)}'),
               onPressed: () => Navigator.pop(ctx, c),
             ),
         ]),
       ),
-      actions: [if (iptalOlur) TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Vazgeç'))],
+      actions: [if (iptalOlur) TextButton(onPressed: () => Navigator.pop(ctx, null), child: Text(t('Vazgeç')))],
     ),
   );
 }
@@ -156,8 +157,8 @@ Future<bool> confirmDlg(BuildContext context, String title, String mesaj,
       title: Text(title, style: const TextStyle(fontSize: 17)),
       content: Text(mesaj),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(hayir)),
-        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(evet)),
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t(hayir))),
+        FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t(evet))),
       ],
     ),
   );
@@ -171,7 +172,7 @@ class HumanDecider implements Decider {
 
   @override
   Future<bool> justSayNo(Game g, Player me, String aciklama) =>
-      confirmDlg(ctx(), '🛑 Reddet?', 'Rakip sana şunu oynadı: $aciklama\n\nElindeki Reddet kartıyla iptal etmek ister misin?',
+      confirmDlg(ctx(), t('🛑 Reddet?'), t('Rakip sana şunu oynadı: {a}\n\nElindeki Reddet kartıyla iptal etmek ister misin?', {'a': oyunMetin(aciklama)}),
           evet: 'Reddet!', hayir: 'Kabul et');
 
   Map<String, List<GameCard>> _gruplar(Player me) => {
@@ -181,7 +182,7 @@ class HumanDecider implements Decider {
 
   @override
   Future<List<GameCard>> ode(Game g, Player me, int tutar, Player alacakli) => pickCards(ctx(),
-      title: '💸 ${alacakli.name}\'a ${tutar}M öde',
+      title: t('💸 {ad}\'a {n}M öde', {'ad': alacakli.name, 'n': tutar}),
       cards: me.varliklar,
       needTotal: tutar.clamp(0, me.varlikToplam),
       onay: 'Öde',
@@ -192,8 +193,8 @@ class HumanDecider implements Decider {
   Future<OdemeKarari> odemeKarari(Game g, Player me, int tutar, Player alacakli, String aciklama,
       {required bool reddedebilir}) async {
     final r = await pickCardsEx(ctx(),
-        title: '💸 ${alacakli.name}: $aciklama',
-        altAciklama: me.varlikToplam <= tutar ? 'Varlığın ${me.varlikToplam}M — tutar bunu aşıyor, hepsini seçmen gerekir.' : null,
+        title: '💸 ${alacakli.name}: ${oyunMetin(aciklama)}',
+        altAciklama: me.varlikToplam <= tutar ? t('Varlığın {n}M — tutar bunu aşıyor, hepsini seçmen gerekir.', {'n': me.varlikToplam}) : null,
         cards: me.varliklar,
         needTotal: tutar.clamp(0, me.varlikToplam),
         onay: 'Öde',
@@ -204,14 +205,13 @@ class HumanDecider implements Decider {
   }
 
   @override
-  Future<PColor> jokerRengi(Game g, Player me, GameCard joker, List<PColor> secenekler) async {
+  Future<PColor?> jokerRengi(Game g, Player me, GameCard joker, List<PColor> secenekler) async {
     if (secenekler.length == 1) return secenekler.first;
-    final c = await pickColor(ctx(), '🃏 Joker hangi renk olsun?', secenekler,
-        altYazi: (k) => '(${me.propsOf(k).length}/${k.setBoyu})');
-    return c ?? secenekler.first;
+    return pickColor(ctx(), t('🃏 Joker hangi renk olsun?'), secenekler,
+        iptalOlur: true, altYazi: (k) => '(${me.propsOf(k).length}/${k.setBoyu})');
   }
 
   @override
   Future<List<GameCard>> atilacaklar(Game g, Player me, int adet) =>
-      pickCards(ctx(), title: '🗑️ El limiti 7 — $adet kart at', cards: me.hand, exact: adet, max: adet, onay: 'At');
+      pickCards(ctx(), title: t('🗑️ El limiti 7 — {n} kart at', {'n': adet}), cards: me.hand, exact: adet, max: adet, onay: 'At');
 }

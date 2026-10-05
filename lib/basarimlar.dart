@@ -1,10 +1,14 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dil.dart';
 
 /// Yerel başarımlar (rozetler). Sayaçlar SharedPreferences'ta; Google Play Games
 /// bağlanınca aynı anahtarlarla oraya da bildirilecek.
 class Basarim {
-  const Basarim(this.id, this.ad, this.aciklama, this.ikon);
-  final String id, ad, aciklama, ikon;
+  const Basarim(this.id, this._ad, this._aciklama, this.ikon);
+  final String id, ikon;
+  final String _ad, _aciklama;
+  String get ad => t(_ad);
+  String get aciklama => t(_aciklama);
 }
 
 const basarimlar = [

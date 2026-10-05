@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import '../dil.dart';
 import '../hesap.dart';
+import '../ses_servis.dart';
 import 'card_widget.dart';
+import 'profil_ekrani.dart';
+import 'sayac.dart';
 
 /// Altın dükkânı: kart arkası, masa çuhası, özel avatar paketi. Satın alınan eşya seçilebilir.
 class DukkanEkrani extends StatefulWidget {
@@ -21,17 +25,18 @@ class _DukkanEkraniState extends State<DukkanEkrani> {
     h.magaza().then((l) {
       if (mounted) setState(() => _esyalar = l);
     }).catchError((_) {
-      if (mounted) setState(() => _mesaj = 'Dükkâna ulaşılamadı.');
+      if (mounted) setState(() => _mesaj = t('Dükkâna ulaşılamadı.'));
     });
   }
 
   Future<void> _al(String id) async {
     setState(() => _mesgul = true);
     final hata = await h.satinAl(id);
+    if (hata == null) AltinSes.azaldi();
     if (mounted) {
       setState(() {
         _mesgul = false;
-        _mesaj = hata ?? 'Satın alındı!';
+        _mesaj = hata ?? t('Satın alındı!');
       });
     }
   }
@@ -42,7 +47,7 @@ class _DukkanEkraniState extends State<DukkanEkrani> {
     if (mounted) {
       setState(() {
         _mesgul = false;
-        _mesaj = hata ?? 'Seçildi.';
+        _mesaj = hata ?? t('Seçildi.');
       });
     }
   }
@@ -55,23 +60,40 @@ class _DukkanEkraniState extends State<DukkanEkrani> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF0F3D25),
         foregroundColor: Colors.white,
-        title: const Text('Dükkân'),
-        actions: [Padding(padding: const EdgeInsets.only(right: 16), child: Center(child: Text('💰 ${h.altin}', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 16))))],
+        title: Text(t('Dükkân')),
+        actions: [Padding(padding: const EdgeInsets.only(right: 16), child: Center(child: SayiGecis(deger: h.altin, bicim: (n) => '💰 $n', stil: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 16))))],
       ),
       body: _esyalar == null
-          ? Center(child: _mesaj != null ? Text(_mesaj!, style: const TextStyle(color: Colors.white70)) : const CircularProgressIndicator(color: Colors.amber))
+          ? Center(child: _mesaj != null ? Text(sunucuMesaj(_mesaj!), style: const TextStyle(color: Colors.white70)) : const CircularProgressIndicator(color: Colors.amber))
           : ListView(padding: const EdgeInsets.all(14), children: [
-              const Text('Altın; oyun sonu ödülleri ve günlük bonusla kazanılır.', style: TextStyle(color: Colors.white54, fontSize: 12)),
+              Text(t('Altın; oyun sonu ödülleri ve günlük bonusla kazanılır.'), style: TextStyle(color: Colors.white54, fontSize: 12)),
               const SizedBox(height: 10),
-              _baslik('Kart arkası'),
-              _satir('kart', 'klasik', 'Klasik (kırmızı)', 0, sahip, h.kartArkasi),
+              if (h.misafir)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.amber.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.amber.withValues(alpha: 0.5))),
+                  child: Row(children: [
+                    Expanded(child: Text(t('Satın almak için giriş yapmalısın. Gezinebilirsin.'), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700))),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
+                      onPressed: () async {
+                        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfilEkrani()));
+                        if (mounted) setState(() {});
+                      },
+                      child: Text(t('Giriş yap')),
+                    ),
+                  ]),
+                ),
+              _baslik(t('Kart arkası')),
+              _satir('kart', 'klasik', t('Klasik (kırmızı)'), 0, sahip, h.kartArkasi),
               for (final e in _esyalar!.where((e) => e['tur'] == 'kart')) _satir('kart', e['id'] as String, e['ad'] as String, e['fiyat'] as int, sahip, h.kartArkasi),
-              _baslik('Masa çuhası'),
-              _satir('masa', 'yesil', 'Yeşil çuha', 0, sahip, h.masa),
+              _baslik(t('Masa çuhası')),
+              _satir('masa', 'yesil', t('Yeşil çuha'), 0, sahip, h.masa),
               for (final e in _esyalar!.where((e) => e['tur'] == 'masa')) _satir('masa', e['id'] as String, e['ad'] as String, e['fiyat'] as int, sahip, h.masa),
-              _baslik('Avatarlar'),
+              _baslik(t('Avatarlar')),
               for (final e in _esyalar!.where((e) => e['tur'] == 'avatar')) _satir('avatar', e['id'] as String, e['ad'] as String, e['fiyat'] as int, sahip, null),
-              if (_mesaj != null) Padding(padding: const EdgeInsets.all(12), child: Text(_mesaj!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700))),
+              if (_mesaj != null) Padding(padding: const EdgeInsets.all(12), child: Text(sunucuMesaj(_mesaj!), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700))),
             ]),
     );
   }
@@ -93,16 +115,16 @@ class _DukkanEkraniState extends State<DukkanEkrani> {
       color: secildi ? const Color(0xFF1E7B3A) : Colors.white10,
       child: ListTile(
         leading: onizleme,
-        title: Text(ad, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-        subtitle: Text(var_ ? (secildi ? 'Seçili' : 'Sende var') : '$fiyat altın', style: const TextStyle(color: Colors.white70)),
+        title: Text(sunucuMesaj(ad), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        subtitle: Text(var_ ? (secildi ? t('Seçili') : t('Sende var')) : t('{n} altın', {'n': fiyat}), style: const TextStyle(color: Colors.white70)),
         trailing: var_
             ? (tur == 'avatar' || secildi
                 ? const Icon(Icons.check_circle, color: Colors.amber)
-                : TextButton(onPressed: _mesgul ? null : () => _sec(tur, id), child: const Text('Seç', style: TextStyle(color: Colors.amber))))
+                : TextButton(onPressed: _mesgul ? null : () => _sec(tur, id), child: Text(t('Seç'), style: TextStyle(color: Colors.amber))))
             : FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
-                onPressed: _mesgul || h.altin < fiyat ? null : () => _al(id),
-                child: Text('Al · $fiyat'),
+                onPressed: _mesgul || h.misafir || h.altin < fiyat ? null : () => _al(id),
+                child: Text(t('Al · {n}', {'n': fiyat})),
               ),
       ),
     );

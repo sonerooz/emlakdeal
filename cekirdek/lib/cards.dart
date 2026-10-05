@@ -125,17 +125,17 @@ extension ActionX on ActionType {
         ActionType.dealBreaker: 'Haciz',
         ActionType.justSayNo: 'Reddet',
         ActionType.slyDeal: 'Tapu Devri',
-        ActionType.forcedDeal: 'Değiş Tokuş',
-        ActionType.tahsilat: 'Tahsilat',
-        ActionType.birthday: 'Doğum Günüm',
+        ActionType.forcedDeal: 'Takas Pazarlığı',
+        ActionType.tahsilat: 'İcra Takibi',
+        ActionType.birthday: 'Ev Partisi',
         ActionType.passGo: '2 Kart Çek',
         ActionType.house: 'Ev',
-        ActionType.hotel: 'Otel',
-        ActionType.doubleRent: 'Çift Kira',
+        ActionType.hotel: 'Rezidans',
+        ActionType.doubleRent: 'Zam Geldi',
       }[this]!;
 
   String get aciklama => const {
-        ActionType.dealBreaker: 'Rakibin TAM bir setini (ev/otel dahil) çal.',
+        ActionType.dealBreaker: 'Rakibin TAM bir setini (ev/rezidans dahil) çal.',
         ActionType.justSayNo: 'Sana oynanan bir aksiyonu iptal et.',
         ActionType.slyDeal: 'Rakipten tamamlanmamış setten bir tapu çal.',
         ActionType.forcedDeal: 'Rakiple bir tapu takas et (tam setler hariç).',

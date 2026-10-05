@@ -1,10 +1,12 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../model/cards.dart';
+import '../dil.dart';
 import '../model/game.dart';
 import 'card_widget.dart';
 import 'dukkan_ekrani.dart' show masaRengi;
 import '../hesap.dart';
+import 'avatar.dart';
 
 /// Masa düzleminde uçan kart (masa koordinatlarında, perspektifle birlikte döner).
 class MasaUcus {
@@ -33,6 +35,7 @@ class Table3D extends StatefulWidget {
     this.profiller = const {},
     this.ucanlar = const [],
     this.ustBilgi,
+    this.rozetMenu,
   });
   final Game game;
   final Player ben;
@@ -49,6 +52,8 @@ class Table3D extends StatefulWidget {
   final List<MasaUcus> ucanlar;
   /// Masanın üstüne bindirilen durum şeridi.
   final Widget? ustBilgi;
+  /// Verilirse insan rakiplerin rozetinde şikayet/engel menüsü açılır (avatara dokun ya da uzun bas).
+  final void Function(Player p)? rozetMenu;
 
   @override
   State<Table3D> createState() => Table3DState();
@@ -199,9 +204,9 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
         );
     Widget oyuncu(Player p) {
       final aktif = g.aktif == p;
-      final ad = p == widget.ben ? 'Sen' : gorunenAd(p.name).replaceAll('Bot ', 'B');
+      final ad = p == widget.ben ? t('Sen') : gorunenAd(p.name).replaceAll('Bot ', 'B');
       return Tooltip(
-        message: '${p.name} masasına bak',
+        message: t('{ad} masasına bak', {'ad': p.name}),
         child: InkWell(
           onTap: () => p == widget.ben ? sifirla() : oyuncuyaDon(p),
           borderRadius: BorderRadius.circular(20),
@@ -219,7 +224,7 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
     return Column(mainAxisSize: MainAxisSize.min, children: [
       for (final p in g.players) oyuncu(p),
       const SizedBox(height: 4),
-      b(Icons.vertical_align_top, 'Tepeden bak', tepeden),
+      b(Icons.vertical_align_top, t('Tepeden bak'), tepeden),
     ]);
   }
 
@@ -310,7 +315,7 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
                       height: 64 * 1.45,
                       decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.white24, width: 1.5)),
                       alignment: Alignment.center,
-                      child: const Text('BOŞ', style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900)),
+                      child: Text(t('BOŞ'), style: const TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w900)),
                     ),
                   ),
                 // destenin kenarı (kalınlık): koyu şeritler
@@ -322,9 +327,10 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
                       width: 64,
                       height: 64 * 1.45,
                       decoration: BoxDecoration(
-                        color: i.isEven ? const Color(0xFF5A0F17) : const Color(0xFF7A1019),
+                        color: Color.lerp(kartArkasiZemin(), Colors.black, i.isEven ? 0.45 : 0.3),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: Colors.black26, width: 0.5),
+                        boxShadow: i == 0 ? const [BoxShadow(color: Colors.black54, blurRadius: 6, offset: Offset(2, 4))] : null,
                       ),
                     ),
                   ),
@@ -348,7 +354,7 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
                 height: 64 * 1.45,
                 decoration: BoxDecoration(borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.white24, width: 1.5)),
                 alignment: Alignment.center,
-                child: const Text('YAKILAN', style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                child: Text(t('YAKILAN'), style: const TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
               ),
             ),
             for (var i = 0; i < gorunen.length; i++)
@@ -397,15 +403,23 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
               // isim + el (oyuncunun kendi kenarı)
               GestureDetector(
                 onTap: () => oyuncuyaDon(p),
+                onLongPress: widget.rozetMenu != null && !p.isBot && !ben ? () => widget.rozetMenu!(p) : null,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(color: aktif ? Colors.amber : Colors.black54, borderRadius: BorderRadius.circular(20)),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Text(widget.profiller[p]?.$1 ?? (p.isBot ? '🤖' : '🙂'), style: const TextStyle(fontSize: 16)),
+                    if (widget.rozetMenu != null && !p.isBot && !ben)
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => widget.rozetMenu!(p),
+                        child: AvatarGorsel(widget.profiller[p]?.$1 ?? '🙂', boyut: 24),
+                      )
+                    else
+                      AvatarGorsel(widget.profiller[p]?.$1 ?? (p.isBot ? '🤖' : '🙂'), boyut: 24),
                     const SizedBox(width: 6),
-                    Text('${p.name} · Sv ${widget.profiller[p]?.$2 ?? 1}', style: TextStyle(color: aktif ? Colors.black : Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
+                    Text(t('{ad} · Sv {n}', {'ad': p.name, 'n': widget.profiller[p]?.$2 ?? 1}), style: TextStyle(color: aktif ? Colors.black : Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
                     const SizedBox(width: 8),
-                    Text('set ${p.tamSetSayisi}/3 · ${p.bankaToplam}M', style: TextStyle(color: aktif ? Colors.black87 : Colors.white70, fontSize: 11)),
+                    Text(t('set {n}/3 · {m}M', {'n': p.tamSetSayisi, 'm': p.bankaToplam}), style: TextStyle(color: aktif ? Colors.black87 : Colors.white70, fontSize: 11)),
                     if (!ben) ...[
                       const SizedBox(width: 8),
                       Row(key: widget.handKeys[p], mainAxisSize: MainAxisSize.min, children: [
@@ -426,4 +440,4 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
   }
 }
 
-String gorunenAd(String n) => n.trim().toLowerCase() == 'sen' ? 'Rakip' : n;
+String gorunenAd(String n) => n.trim().toLowerCase() == 'sen' ? t('Rakip') : n;

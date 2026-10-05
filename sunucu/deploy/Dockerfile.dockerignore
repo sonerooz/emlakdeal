@@ -1,0 +1,11 @@
+# BuildKit: bu dosya Dockerfile'a özeldir; kökteki flutter projesini bağlamdan çıkarır.
+*
+!cekirdek/
+!sunucu/
+sunucu/deploy/
+**/.dart_tool/
+**/build/
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/.env

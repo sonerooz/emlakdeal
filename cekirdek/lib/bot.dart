@@ -16,7 +16,7 @@ class BotDecider extends Decider {
   @override
   Future<bool> justSayNo(Game g, Player me, String aciklama) async {
     if (zorluk == 0 && _rng.nextDouble() < 0.6) return false;
-    if (aciklama.contains('Haciz') || aciklama.contains('Tapu Devri') || aciklama.contains('Değiş Tokuş')) {
+    if (aciklama.contains('Haciz') || aciklama.contains('Tapu Devri') || aciklama.contains('Takas Pazarlığı')) {
       return true;
     }
     final m = RegExp(r'\((\d+)M\)').firstMatch(aciklama);
@@ -166,7 +166,7 @@ class BotDecider extends Decider {
       calinabilir.sort((a, b) => _calmaSkor(me, b).compareTo(_calmaSkor(me, a)));
       return g.slyDeal(me, sd, calinabilir.first);
     }
-    // 5) Değiş Tokuş (sadece set tamamlıyorsa)
+    // 5) Takas Pazarlığı (sadece set tamamlıyorsa)
     final fd = _kart(me, ActionType.forcedDeal);
     if (fd != null && calinabilir.isNotEmpty && !_kacir()) {
       final benimkiler = g.calinabilir(me);

@@ -7,17 +7,18 @@ class Ayarlar {
   static final Ayarlar o = Ayarlar._();
   SharedPreferences? _p;
 
-  String ad = 'Sen';
+  String ad = 'Misafir';
   bool sesli = true;
   bool muzik = false;
-  String sunucu = 'wss://emlakdeal.tailb92005.ts.net';
+  String get sunucu => 'wss://emlakdeal.tailb92005.ts.net';
   static const sunucuYerel = 'ws://192.168.1.21:8765';
   int botZorluk = 1; // 0 kolay, 1 normal, 2 zor
-  int turSuresi = 0; // sn, tek kişilik oyunda; 0 = kapalı
   int sayacHaciz = 0, sayacReddet = 0;
   int oynanan = 0;
   int kazanilan = 0;
   bool ogreticiGoruldu = false;
+  bool ogreticiDemoBitti = false;
+  String dil = ''; // '' = cihaz diline göre
 
   Future<void> yukle() async {
     final p = await SharedPreferences.getInstance();
@@ -25,15 +26,14 @@ class Ayarlar {
     ad = p.getString('ad') ?? ad;
     sesli = p.getBool('sesli') ?? sesli;
     muzik = p.getBool('muzik') ?? muzik;
-    sunucu = p.getString('sunucu') ?? sunucu;
-    if (sunucu == sunucuYerel) sunucu = 'wss://emlakdeal.tailb92005.ts.net'; // eski kurulumlar yeni adrese geçsin
     botZorluk = p.getInt('botZorluk') ?? botZorluk;
-    turSuresi = p.getInt('turSuresi') ?? 0;
     sayacHaciz = p.getInt('sayacHaciz') ?? 0;
     sayacReddet = p.getInt('sayacReddet') ?? 0;
     oynanan = p.getInt('oynanan') ?? 0;
     kazanilan = p.getInt('kazanilan') ?? 0;
     ogreticiGoruldu = p.getBool('ogretici') ?? false;
+    ogreticiDemoBitti = p.getBool('ogretici_demo') ?? false;
+    dil = p.getString('dil') ?? '';
   }
 
   Future<void> kaydet() async {
@@ -42,14 +42,14 @@ class Ayarlar {
     await p.setString('ad', ad);
     await p.setBool('sesli', sesli);
     await p.setBool('muzik', muzik);
-    await p.setString('sunucu', sunucu);
     await p.setInt('botZorluk', botZorluk);
-    await p.setInt('turSuresi', turSuresi);
     await p.setInt('sayacHaciz', sayacHaciz);
     await p.setInt('sayacReddet', sayacReddet);
     await p.setInt('oynanan', oynanan);
     await p.setInt('kazanilan', kazanilan);
     await p.setBool('ogretici', ogreticiGoruldu);
+    await p.setBool('ogretici_demo', ogreticiDemoBitti);
+    if (dil.isNotEmpty) await p.setString('dil', dil);
   }
 
   /// Tek kişilik oyun kaydı (uygulama kapanınca devam edebilmek için).

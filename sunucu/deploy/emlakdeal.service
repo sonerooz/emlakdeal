@@ -1,0 +1,33 @@
+# Docker KULLANMAYAN alternatif. Kurulum: README "Docker'sız (systemd)" bölümü.
+# cp emlakdeal.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now emlakdeal
+[Unit]
+Description=Emlak Deal sunucusu
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=emlak
+Group=emlak
+# bundle/bin/sunucu + bundle/lib/libsqlite3.so  =>  /opt/emlakdeal/
+WorkingDirectory=/var/lib/emlakdeal
+EnvironmentFile=/etc/emlakdeal/emlakdeal.env
+ExecStart=/opt/emlakdeal/bin/sunucu 8765
+Restart=on-failure
+RestartSec=3
+# 5 dakikada 10'dan fazla çökerse dursun, yedek/izleme uyarsın
+StartLimitIntervalSec=300
+StartLimitBurst=10
+LimitNOFILE=65535
+
+# Sertleştirme
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/emlakdeal
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

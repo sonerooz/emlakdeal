@@ -40,6 +40,9 @@ dependencies:
     path: cekirdek
   google_sign_in: 6.2.2
   flutter_facebook_auth: 7.1.1
+  sign_in_with_apple: ^7.0.1
+  url_launcher: ^6.3.3
+  package_info_plus: ^10.2.2
 
 dev_dependencies:
   flutter_test:
@@ -65,6 +68,7 @@ flutter:
   assets:
     - assets/ses/
     - assets/img/
+    - assets/siluet/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
