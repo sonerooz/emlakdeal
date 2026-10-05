@@ -873,28 +873,28 @@ Future<Map<String, dynamic>?> _jsonGet(String url) async {
 }
 
 final _appleIstemci = Platform.environment['EMLAKDEAL_APPLE_CLIENT_ID'] ?? 'com.soner.emlakdeal';
-List<dynamic> _appleAnahtarlar = const [];
-DateTime _appleAnahtarZamani = DateTime.fromMillisecondsSinceEpoch(0);
+final _jwksOnbellek = <String, ({List<dynamic> anahtarlar, DateTime zaman})>{};
 
 BigInt _bigOku(List<int> b) => b.fold(BigInt.zero, (a, x) => (a << 8) | BigInt.from(x));
 
-/// Apple kimlik token'ı (RS256 JWT): imza Apple'ın yayımladığı anahtarla, iss/aud/exp kontrol edilir. Geçerliyse yük döner.
-Future<Map<String, dynamic>?> _appleDogrula(String jwt) async {
+/// RS256 JWT: imza sağlayıcının yayımladığı anahtarlarla (JWKS), iss/aud/exp kontrol edilir. Geçerliyse yük döner.
+Future<Map<String, dynamic>?> _jwtDogrula(String jwt, {required String jwksUrl, required Set<String> issler, required String aud}) async {
   try {
     final p = jwt.split('.');
     if (p.length != 3) return null;
     Map<String, dynamic> coz(String s) => (jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(s)))) as Map).cast<String, dynamic>();
     final baslik = coz(p[0]), yuk = coz(p[1]);
     if (baslik['alg'] != 'RS256') return null;
-    if (yuk['iss'] != 'https://appleid.apple.com' || yuk['aud'] != _appleIstemci) return null;
+    if (!issler.contains(yuk['iss']) || yuk['aud'] != aud) return null;
     if (((yuk['exp'] as num) * 1000).toInt() < DateTime.now().millisecondsSinceEpoch) return null;
-    if (DateTime.now().difference(_appleAnahtarZamani) > const Duration(hours: 1) || !_appleAnahtarlar.any((k) => k['kid'] == baslik['kid'])) {
-      final j = await _jsonGet('https://appleid.apple.com/auth/keys');
+    var onbellek = _jwksOnbellek[jwksUrl];
+    if (onbellek == null || DateTime.now().difference(onbellek.zaman) > const Duration(hours: 1) || !onbellek.anahtarlar.any((k) => k['kid'] == baslik['kid'])) {
+      final j = await _jsonGet(jwksUrl);
       if (j == null) return null;
-      _appleAnahtarlar = j['keys'] as List;
-      _appleAnahtarZamani = DateTime.now();
+      onbellek = (anahtarlar: j['keys'] as List, zaman: DateTime.now());
+      _jwksOnbellek[jwksUrl] = onbellek;
     }
-    final k = _appleAnahtarlar.cast<Map>().firstWhere((k) => k['kid'] == baslik['kid'], orElse: () => const {});
+    final k = onbellek.anahtarlar.cast<Map>().firstWhere((k) => k['kid'] == baslik['kid'], orElse: () => const {});
     if (k.isEmpty) return null;
     final n = _bigOku(base64Url.decode(base64Url.normalize(k['n'] as String)));
     final e = _bigOku(base64Url.decode(base64Url.normalize(k['e'] as String)));
@@ -932,6 +932,15 @@ Future<({String? kimlik, String? ad, String? hata})> _sosyalDogrula(String sagla
   }
   if (saglayici == 'facebook') {
     if (_facebookUygulama.isEmpty) return (kimlik: null, ad: null, hata: 'yapılandırılmadı: Facebook girişi sunucuda henüz ayarlanmadı.');
+    // iOS'ta Limited Login: token Graph erişim token'ı değil, Facebook'un imzaladığı OIDC JWT'sidir.
+    if (token.split('.').length == 3) {
+      final y = await _jwtDogrula(token,
+          jwksUrl: 'https://limited.facebook.com/.well-known/oauth/openid/jwks/',
+          issler: {'https://www.facebook.com', 'https://facebook.com', 'https://limited.facebook.com'},
+          aud: _facebookUygulama);
+      if (y == null || y['sub'] == null) return (kimlik: null, ad: null, hata: 'Facebook girişi doğrulanamadı.');
+      return (kimlik: '${y['sub']}', ad: (y['given_name'] ?? y['name']) as String?, hata: null);
+    }
     final t = Uri.encodeQueryComponent(token);
     final app = await _jsonGet('https://graph.facebook.com/app?access_token=$t');
     if (app == null || '${app['id']}' != _facebookUygulama) return (kimlik: null, ad: null, hata: 'Facebook girişi doğrulanamadı.');
@@ -940,7 +949,7 @@ Future<({String? kimlik, String? ad, String? hata})> _sosyalDogrula(String sagla
     return (kimlik: '${me['id']}', ad: me['first_name'] as String?, hata: null);
   }
   if (saglayici == 'apple') {
-    final y = await _appleDogrula(token);
+    final y = await _jwtDogrula(token, jwksUrl: 'https://appleid.apple.com/auth/keys', issler: {'https://appleid.apple.com'}, aud: _appleIstemci);
     if (y == null || y['sub'] == null) return (kimlik: null, ad: null, hata: 'Apple girişi doğrulanamadı.');
     return (kimlik: '${y['sub']}', ad: null, hata: null);
   }
