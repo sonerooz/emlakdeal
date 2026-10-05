@@ -855,7 +855,8 @@ Future<void> main(List<String> args) async {
 }
 
 final _girisHatalari = <String, List<DateTime>>{};
-final _googleIstemci = Platform.environment['EMLAKDEAL_GOOGLE_CLIENT_ID'] ?? '';
+/// Virgülle ayrılmış liste: Web istemcisi + iOS istemcisi (iOS'ta id_token'ın aud alanı iOS istemci kimliğidir).
+final _googleIstemciler = (Platform.environment['EMLAKDEAL_GOOGLE_CLIENT_ID'] ?? '').split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
 final _facebookUygulama = Platform.environment['EMLAKDEAL_FACEBOOK_APP_ID'] ?? '';
 
 Future<Map<String, dynamic>?> _jsonGet(String url) async {
@@ -924,9 +925,9 @@ Future<Map<String, dynamic>?> _appleDogrula(String jwt) async {
 Future<({String? kimlik, String? ad, String? hata})> _sosyalDogrula(String saglayici, String token) async {
   if (token.isEmpty) return (kimlik: null, ad: null, hata: 'Token yok.');
   if (saglayici == 'google') {
-    if (_googleIstemci.isEmpty) return (kimlik: null, ad: null, hata: 'yapılandırılmadı: Google girişi sunucuda henüz ayarlanmadı.');
+    if (_googleIstemciler.isEmpty) return (kimlik: null, ad: null, hata: 'yapılandırılmadı: Google girişi sunucuda henüz ayarlanmadı.');
     final j = await _jsonGet('https://oauth2.googleapis.com/tokeninfo?id_token=${Uri.encodeQueryComponent(token)}');
-    if (j == null || j['aud'] != _googleIstemci || j['sub'] == null) return (kimlik: null, ad: null, hata: 'Google girişi doğrulanamadı.');
+    if (j == null || !_googleIstemciler.contains(j['aud']) || j['sub'] == null) return (kimlik: null, ad: null, hata: 'Google girişi doğrulanamadı.');
     return (kimlik: '${j['sub']}', ad: (j['given_name'] ?? j['name']) as String?, hata: null);
   }
   if (saglayici == 'facebook') {
