@@ -285,7 +285,7 @@ class GameCard {
         d.add(GameCard._(id: id++, kind: CardKind.property, color: c, sokak: ad));
       }
     }
-    // Joker mülkler (12)
+    // Joker mülkler (13)
     GameCard w(int i, List<PColor> cs, int v) =>
         GameCard._(id: i, kind: CardKind.wild, colors: cs, value: v);
     ekle((i) => w(i, [PColor.pink, PColor.orange], 2), 2);
@@ -296,6 +296,7 @@ class GameCard {
     ekle((i) => w(i, [PColor.railroad, PColor.green], 4), 1);
     ekle((i) => w(i, [PColor.railroad, PColor.utility], 2), 1);
     ekle((i) => w(i, [PColor.rose, PColor.brown], 2), 1);
+    ekle((i) => w(i, [PColor.rose, PColor.railroad], 2), 1);
     ekle((i) => w(i, const [], 0), 2); // çok renkli joker (değeri 0)
     // Aksiyonlar (40)
     GameCard a(int i, ActionType t) =>
@@ -324,7 +325,7 @@ class GameCard {
     ekle((i) => r(i, [PColor.railroad, PColor.utility], 1), 2);
     ekle((i) => r(i, [PColor.rose, PColor.brown], 1), 2);
     ekle((i) => r(i, const [], 3), 3);
-    assert(d.length == 122);
+    assert(d.length == 123);
     d.shuffle(Random());
     return d;
   }

@@ -33,8 +33,8 @@ void main() {
   group('deste', () {
     final deste = GameCard.yeniDeste();
 
-    test('122 kart, kimlikler benzersiz', () {
-      expect(deste.length, 122);
+    test('123 kart, kimlikler benzersiz', () {
+      expect(deste.length, 123);
       expect(deste.map((c) => c.id).toSet().length, deste.length);
     });
 
