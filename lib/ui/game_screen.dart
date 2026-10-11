@@ -647,7 +647,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     final adim = kim == ben ? t('Sen') : gorunenAd(kim?.name ?? '');
     Offset elM(Player p) => _masaNokta(p == ben ? _kBenEl : _kBotEl[p]);
     Offset setM(Player p) => _masaNokta(p == ben ? _kBenSet : _kBotSet[p]);
-    Offset bankaM(Player p) => _masaNokta(p == ben ? _kBenBanka : _kBotSet[p]);
+    Offset bankaM(Player p) => p == ben ? _masaNokta(_kBenBanka, fallback: setM(ben)) : setM(p);
     final deste = _masaNokta(_kDeck), yakilan = _masaNokta(_kMerkez);
     switch (e.tip) {
       case EvTip.cek:
@@ -674,7 +674,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
       case EvTip.aksiyon:
         final yazi = '$adim: ${e.etiket != null ? _bas(oyunMetin(e.etiket!)) : e.card.adT}';
         if (!mounted) return;
-        setState(() => _banner = yazi);
+        setState(() {
+          _konusan = null;
+          _banner = yazi;
+        });
         await _buyukGoster(e.card, yazi, kim == ben ? 900 : 1500);
         if (!mounted) return;
         setState(() => _banner = null);
@@ -682,7 +685,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
       case EvTip.transfer:
         final from = e.card.isProperty ? setM(kim!) : bankaM(kim!);
         final to = e.card.isProperty ? setM(e.kime!) : bankaM(e.kime!);
-        if (mounted) setState(() => _banner = '${_bas(oyunMetin(e.etiket ?? 'Ödeme'))}: ${e.card.adT} → ${e.kime!.name}');
+        // ödeme balonu bir konuşma değil: önceki konuşmacının adı başlıkta kalmasın
+        if (mounted) {
+          setState(() {
+            _konusan = null;
+            _banner = '${_bas(oyunMetin(e.etiket ?? 'Ödeme'))}: ${e.card.adT} → ${gorunenAd(e.kime!.name)}';
+          });
+        }
         await _masaUcur(e.card, from, to, ms: 650, w: 50);
         if (mounted) setState(() => _banner = null);
     }
@@ -1392,7 +1401,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     final kim = p == ben ? 'ben' : p.name;
     final w = kucuk ? 38.0 : 46.0;
     if (renkler.isEmpty && p.bank.isEmpty) {
-      return Text(t('Henüz kart yok'), style: TextStyle(color: Colors.white38, fontSize: kucuk ? 11 : 13));
+      // masası boş oyuncunun ilk kartı da kendi alanına uçsun: hedef anahtar boşken de bulunmalı
+      return Container(
+        key: p == ben ? _kBenSet : _kBotSet[p],
+        child: Text(t('Henüz kart yok'), style: TextStyle(color: Colors.white38, fontSize: kucuk ? 11 : 13)),
+      );
     }
     final banka = KeyedSubtree(
       key: p == ben ? _kBenBanka : null,

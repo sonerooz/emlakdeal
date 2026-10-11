@@ -46,7 +46,7 @@ extension KartCeviri on GameCard {
   String get adT {
     switch (kind) {
       case CardKind.money:
-        return ad;
+        return paraYaz(ad);
       case CardKind.property:
         return sokak != null ? t(sokak!) : color!.adT;
       case CardKind.wild:
@@ -61,7 +61,7 @@ extension KartCeviri on GameCard {
   String get kisaAdT {
     switch (kind) {
       case CardKind.money:
-        return ad;
+        return paraYaz(ad);
       case CardKind.property:
         return sokak != null ? t(sokak!) : color!.adT;
       case CardKind.wild:
