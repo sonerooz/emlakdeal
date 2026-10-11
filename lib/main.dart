@@ -92,7 +92,9 @@ class _MenuScreenState extends State<MenuScreen> {
       try {
         await n.baglan();
       } catch (_) {
-        final y = Istemci(Ayarlar.sunucuYerel);
+        final yerel = Ayarlar.sunucuYerel;
+        if (yerel == null) rethrow;
+        final y = Istemci(yerel);
         await y.baglan();
         _varlik = y;
       }

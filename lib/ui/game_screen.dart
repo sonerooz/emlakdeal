@@ -9,7 +9,6 @@ import '../model/cards.dart';
 import '../model/game.dart';
 import 'card_widget.dart';
 import 'package:emlakdeal_cekirdek/aktarim.dart';
-import 'dart:io';
 import '../ayarlar.dart';
 import '../dil.dart';
 import '../dil/soz.dart' show sozEn;
@@ -846,18 +845,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     }
   }
 
-  /// Botla oynanan oyunun sonucu: XP/altın (hesap sunucusu) + eski liderlik dosyası.
+  /// Botla oynanan oyunun sonucu: XP/altın (hesap sunucusu).
   Future<void> _sonucGonder(bool kazandim) async {
     final r = await Hesap.o.sonuc(kazandi: kazandim, rakip: botlar.length, zorluk: Ayarlar.o.botZorluk, basarimlar: BasarimDurumu.o.acik.toList());
     if (r != null && mounted) setState(() => _odul = r);
-    try {
-      final adres = '${Ayarlar.o.sunucu.replaceFirst('wss://', 'https://').replaceFirst('ws://', 'http://')}/sonuc';
-      final c = HttpClient()..connectionTimeout = const Duration(seconds: 5);
-      final r = await c.postUrl(Uri.parse(adres));
-      r.headers.contentType = ContentType.json;
-      r.write(jsonEncode({'ad': Ayarlar.o.ad, 'kazandi': kazandim}));
-      await (await r.close()).drain<void>();
-    } catch (_) {}
   }
 
   bool get _sirada => _hazir && game.aktif == ben && game.kazanan == null && !_botOynuyor && _ucanlar.isEmpty && _masaUcanlar.isEmpty && _buyukKart == null;

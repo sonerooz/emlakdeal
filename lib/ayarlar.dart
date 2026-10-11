@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,7 +12,8 @@ class Ayarlar {
   bool sesli = true;
   bool muzik = false;
   String get sunucu => 'wss://emlakdeal.tailb92005.ts.net';
-  static const sunucuYerel = 'ws://192.168.1.21:8765';
+  /// Ev ağındaki şifresiz test sunucusu: yalnız debug derlemede. Release'te token/şifre asla şifresiz kanala gitmez.
+  static const String? sunucuYerel = kDebugMode ? 'ws://192.168.1.21:8765' : null;
   int botZorluk = 1; // 0 kolay, 1 normal, 2 zor
   int sayacHaciz = 0, sayacReddet = 0;
   int oynanan = 0;

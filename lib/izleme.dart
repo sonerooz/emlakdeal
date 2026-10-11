@@ -310,7 +310,7 @@ class Izleme with WidgetsBindingObserver {
   /// Bağımsız POST: /api/hata yetkisiz de kabul eder, token varsa eklenir.
   /// 5xx/ağ hatası = teslim edilemedi (yeniden denenir); 4xx = kalıcı red, tekrar deneme.
   Future<bool> _http(Map<String, dynamic> rapor) async {
-    final kokler = <String>{_kok(Ayarlar.o.sunucu), _kok(Ayarlar.sunucuYerel)};
+    final kokler = <String>{_kok(Ayarlar.o.sunucu), if (Ayarlar.sunucuYerel != null) _kok(Ayarlar.sunucuYerel!)};
     final govde = jsonEncode(rapor);
     for (final kok in kokler) {
       for (final yetkili in [true, false]) {

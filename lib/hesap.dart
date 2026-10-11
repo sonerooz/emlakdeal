@@ -49,11 +49,12 @@ class Hesap {
   }
 
   String get _apiKok => Ayarlar.o.sunucu.replaceFirst('wss://', 'https://').replaceFirst('ws://', 'http://');
-  String get _apiKokYerel => Ayarlar.sunucuYerel.replaceFirst('ws://', 'http://');
+  String? get _apiKokYerel => Ayarlar.sunucuYerel?.replaceFirst('ws://', 'http://');
+  List<String> get _kokler => [_apiKok, if (_apiKokYerel != null && _apiKokYerel != _apiKok) _apiKokYerel!];
 
   Future<Map<String, dynamic>> _istek(String yol, {Map<String, dynamic>? govde, bool yetki = true}) async {
     Object? sonHata;
-    for (final kok in [_apiKok, if (_apiKok != _apiKokYerel) _apiKokYerel]) {
+    for (final kok in _kokler) {
       try {
         final c = HttpClient()..connectionTimeout = const Duration(seconds: 6);
         final r = govde == null ? await c.getUrl(Uri.parse('$kok$yol')) : await c.postUrl(Uri.parse('$kok$yol'));
@@ -394,7 +395,7 @@ class Hesap {
   String yasalUrl(String sayfa) => '$_apiKok/$sayfa?dil=${Dil.o.kod}';
 
   Future<List<Map<String, dynamic>>> liderlik() async {
-    for (final kok in [_apiKok, _apiKokYerel]) {
+    for (final kok in _kokler) {
       try {
         final c = HttpClient()..connectionTimeout = const Duration(seconds: 6);
         final y = await (await c.getUrl(Uri.parse('$kok/api/liderlik'))).close();

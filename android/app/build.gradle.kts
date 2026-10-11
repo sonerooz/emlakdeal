@@ -49,7 +49,13 @@ android {
 
     buildTypes {
         release {
-            signingConfig = if (anahtarDosyasi.exists()) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            // Market derlemesi upload anahtarıyla imzalanır. Anahtar yoksa derleme durur; yalnız
+            // EMLAKDEAL_DEBUG_IMZA=1 verilirse (telefona test kurulumu) debug anahtarıyla imzalanır.
+            signingConfig = when {
+                anahtarDosyasi.exists() && System.getenv("EMLAKDEAL_DEBUG_IMZA") != "1" -> signingConfigs.getByName("release")
+                System.getenv("EMLAKDEAL_DEBUG_IMZA") == "1" -> signingConfigs.getByName("debug")
+                else -> throw GradleException("android/key.properties yok: market derlemesi imzalanamaz (test için EMLAKDEAL_DEBUG_IMZA=1)")
+            }
         }
     }
 }

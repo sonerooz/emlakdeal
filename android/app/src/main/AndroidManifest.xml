@@ -3,7 +3,10 @@
     <application
         android:label="Emlak Deal"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/veri_cikarma">
         <activity
             android:name=".MainActivity"
             android:exported="true"

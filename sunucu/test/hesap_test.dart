@@ -40,13 +40,13 @@ void main() {
       expect(db.testSayi('SELECT COUNT(*) FROM kullanicilar WHERE id = $misafir'), 0);
     });
 
-    test('e-posta girişinde misafir birleşir, bağlı hesap birleşmez', () {
+    test('e-posta girişinde misafir birleşir, bağlı hesap birleşmez', () async {
       final db = Db(':memory:');
       final hesap = db.misafir('cihaz-a').id;
-      expect(db.epostaBagla(hesap, 'a@b.com', 'sifre123'), isNull);
+      expect(await db.epostaBagla(hesap, 'a@b.com', 'sifre123'), isNull);
       final misafir = db.misafir('cihaz-b').id;
       db.sonuc(misafir, kazandi: false, rakip: 1, online: false);
-      final r = db.epostaGiris('a@b.com', 'sifre123', misafir: misafir)!;
+      final r = (await db.epostaGiris('a@b.com', 'sifre123', misafir: misafir))!;
       expect(r.id, hesap);
       expect(r.birlesti, isTrue);
       expect(db.testSayi('SELECT COUNT(*) FROM kullanicilar WHERE id = $misafir'), 0);
@@ -56,11 +56,11 @@ void main() {
       expect(db.testSayi('SELECT COUNT(*) FROM kullanicilar WHERE id = $baska'), 1);
     });
 
-    test('yanlış şifrede misafir korunur; kimlik bağlıyken ikinci aynı sağlayıcı reddedilir', () {
+    test('yanlış şifrede misafir korunur; kimlik bağlıyken ikinci aynı sağlayıcı reddedilir', () async {
       final db = Db(':memory:');
       final hesap = db.sosyal('google', 'g-1', nick: 'Ayse').id!;
       final misafir = db.misafir('cihaz-c').id;
-      expect(db.epostaGiris('yok@b.com', 'x', misafir: misafir), isNull);
+      expect(await db.epostaGiris('yok@b.com', 'x', misafir: misafir), isNull);
       expect(db.testSayi('SELECT COUNT(*) FROM kullanicilar WHERE id = $misafir'), 1);
       final r = db.sosyal('google', 'g-2', bagla: hesap);
       expect(r.hata, isNotNull);

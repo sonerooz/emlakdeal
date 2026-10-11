@@ -18,55 +18,8 @@ import 'filtre.dart';
 import 'yasal.dart';
 
 final odalar = <String, Oda>{};
-final liderlik = Liderlik('liderlik.json');
 late final Db db;
 
-/// Basit liderlik tablosu: ad → {oyun, galibiyet, online}. Dosyaya yazılır.
-class Liderlik {
-  Liderlik(this.yol) {
-    try {
-      final f = File(yol);
-      if (f.existsSync()) tablo = Map<String, dynamic>.from(jsonDecode(f.readAsStringSync()) as Map);
-    } catch (_) {}
-  }
-  final String yol;
-  Map<String, dynamic> tablo = {};
-
-  void kaydet(String ad, bool kazandi, {bool online = false}) {
-    final a = ad.trim();
-    if (a.isEmpty || a.length > 24) return;
-    final e = Map<String, dynamic>.from((tablo[a] as Map?) ?? {'oyun': 0, 'galibiyet': 0, 'online': 0});
-    e['oyun'] = (e['oyun'] as int) + 1;
-    if (kazandi) e['galibiyet'] = (e['galibiyet'] as int) + 1;
-    if (online) e['online'] = ((e['online'] as int?) ?? 0) + 1;
-    e['son'] = DateTime.now().toIso8601String();
-    tablo[a] = e;
-    try {
-      File(yol).writeAsStringSync(jsonEncode(tablo));
-    } catch (e) {
-      log('liderlik yazılamadı: $e');
-    }
-  }
-
-  /// Hesap silinince adı tablodan çıkarır.
-  void sil(String ad) {
-    if (tablo.remove(ad.trim()) == null) return;
-    try {
-      File(yol).writeAsStringSync(jsonEncode(tablo));
-    } catch (e) {
-      log('liderlik yazılamadı: $e');
-    }
-  }
-
-  List<Map<String, dynamic>> sirali() {
-    final l = [for (final e in tablo.entries) {'ad': e.key, ...Map<String, dynamic>.from(e.value as Map)}];
-    l.sort((a, b) {
-      final c = (b['galibiyet'] as int).compareTo(a['galibiyet'] as int);
-      return c != 0 ? c : (a['oyun'] as int).compareTo(b['oyun'] as int);
-    });
-    return l.take(50).toList();
-  }
-}
 final rng = Random();
 
 void log(String s) => stdout.writeln('${DateTime.now().toIso8601String().substring(11, 19)} $s');
@@ -291,7 +244,16 @@ class Oda {
     game = g;
     g.addListener(durumYayinla);
     g.animator = (e) async {
-      herkese({'t': 'olay', 'o': olayJson(g, e)});
+      if (e.tip == EvTip.cek) {
+        // çekilen kartı yalnız çeken görür; diğerlerine kart arkası (sahte para kartı) gider
+        final acik = olayJson(g, e);
+        final gizli = olayJson(g, GameEvent(EvTip.cek, GameCard.para(-1, 1), kim: e.kim));
+        for (final k in koltuklar) {
+          k.bag?.gonder({'t': 'olay', 'o': k.player == e.kim ? acik : gizli});
+        }
+      } else {
+        herkese({'t': 'olay', 'o': olayJson(g, e)});
+      }
       // istemciler kendi animasyonlarını oynatırken sunucu kısa bekler
       final insan = e.kim != null && !e.kim!.isBot;
       await Future.delayed(Duration(milliseconds: e.tip == EvTip.aksiyon ? (insan ? 900 : 1500) : (insan ? 350 : 550)));
@@ -393,7 +355,6 @@ class Oda {
       for (final k in koltuklar) {
         if (k.player == null) continue;
         final kazandi = k.player == g.kazanan && !k.botlasti;
-        liderlik.kaydet(k.ad, kazandi, online: true);
         final kid = k.kullaniciId;
         if (kid != null) {
           try {
@@ -442,10 +403,17 @@ class Oda {
       k.bag?.gonder({'t': 'hata', 'm': 'Sıra sende değil.'});
       return;
     }
-    GameCard? kart(String alan) => m[alan] == null ? null : kartBul(g, m[alan] as int);
-    Player? oyuncu(String alan) => m[alan] == null ? null : g.players[m[alan] as int];
-    PColor? renk(String alan) => m[alan] == null ? null : PColor.values[m[alan] as int];
-    final tip = m['tip'] as String;
+    GameCard? kart(String alan) => m[alan] is int ? kartBul(g, m[alan] as int) : null;
+    Player? oyuncu(String alan) {
+      final i = m[alan];
+      return i is int && i >= 0 && i < g.players.length ? g.players[i] : null;
+    }
+    PColor? renk(String alan) {
+      final i = m[alan];
+      return i is int && i >= 0 && i < PColor.values.length ? PColor.values[i] : null;
+    }
+    final tip = m['tip'];
+    if (tip is! String) return;
     if (mesgul) {
       k.bag?.gonder({'t': 'hata', 'm': 'Önceki hamle sürüyor, bekle.'});
       return;
@@ -482,7 +450,7 @@ class Oda {
       }
     } catch (e, st) {
       log('hamle hatası ($tip): $e\n$st');
-      k.bag?.gonder({'t': 'hata', 'm': 'Hamle yapılamadı: $e'});
+      k.bag?.gonder({'t': 'hata', 'm': 'Hamle yapılamadı.'});
     } finally {
       mesgul = false;
     }
@@ -518,7 +486,7 @@ class UzakKarar extends Decider {
 
   void cevap(int id, dynamic deger) => _bekleyen[id]?.complete(deger);
 
-  List<GameCard> _kartlar(Game g, dynamic l) => [for (final id in (l as List)) kartBul(g, id as int)].whereType<GameCard>().toList();
+  List<GameCard> _kartlar(Game g, dynamic l) => [for (final id in (l is List ? l : const [])) if (id is int) kartBul(g, id)].whereType<GameCard>().toList();
 
   @override
   Future<bool> justSayNo(Game g, Player me, String aciklama) async {
@@ -560,17 +528,35 @@ class UzakKarar extends Decider {
   }
 }
 
-String yeniKod() {
+String? yeniKod() {
   const h = 'ABCDEFGHJKLMNPRSTUVYZ';
-  while (true) {
+  for (var i = 0; i < 200; i++) {
     final k = List.generate(4, (_) => h[rng.nextInt(h.length)]).join();
     if (!odalar.containsKey(k)) return k;
   }
+  return null;
+}
+
+/// Aynı anda açık olabilecek en çok oda (bellek ve oda kodu alanı için).
+const enCokOda = 2000;
+
+/// Bağlantı yeni bir odaya geçmeden önce eski (başlamamış) odasından çıkar; oyun sürüyorsa geçemez.
+bool _eskiOdadanCik(Baglanti b) {
+  final o = b.oda;
+  if (o == null) return true;
+  if (o.basladi && odalar.containsKey(o.kod) && o.game?.kazanan == null) {
+    b.gonder({'t': 'hata', 'm': 'Önce sürdüğün oyundan çıkmalısın.'});
+    return false;
+  }
+  _odadanCik(b);
+  b.oda = null;
+  b.koltuk = null;
+  return true;
 }
 
 /// Online oda işlemleri girişli (misafir olmayan) hesap ister.
 bool _onlineIzni(Baglanti b, Map<String, dynamic> m) {
-  final id = db.oturumKim(m['token'] as String?);
+  final id = db.oturumKim(m['token'] is String ? m['token'] as String : null);
   if (id != null && !db.misafirMi(id)) return true;
   b.gonder({'t': 'hata', 'm': 'Online oyun için giriş yapmalısın.', 'giris': true});
   return false;
@@ -581,16 +567,22 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
   switch (t) {
     case 'kur':
       if (!_onlineIzni(b, m)) return;
+      if (!_eskiOdadanCik(b)) return;
+      final yk = odalar.length < enCokOda ? yeniKod() : null;
+      if (yk == null) {
+        b.gonder({'t': 'hata', 'm': 'Sunucu şu an çok yoğun, biraz sonra tekrar dene.'});
+        return;
+      }
       final pr = _profilden(m);
       b.ad = pr.ad;
       if (pr.id != null) {
         b.kullaniciId = pr.id;
         cevrimici[pr.id!] = b;
       }
-      final oda = Oda(yeniKod(), Koltuk(b.ad, b, kullaniciId: pr.id, avatar: pr.avatar, level: pr.level, ses: pr.ses));
+      final oda = Oda(yk, Koltuk(b.ad, b, kullaniciId: pr.id, avatar: pr.avatar, level: pr.level, ses: pr.ses));
       oda.koltuklar.add(oda.sahip);
-      oda.botSayisi = ((m['bot'] as int?) ?? 1).clamp(0, 3);
-      final bh = (m['bahis'] as int?) ?? 0;
+      oda.botSayisi = (m['bot'] is int ? m['bot'] as int : 1).clamp(0, 3);
+      final bh = m['bahis'] is int ? m['bahis'] as int : 0;
       if (!Oda.bahisSecenekleri.contains(bh)) {
         b.gonder({'t': 'hata', 'm': 'Oda tutarı seçmelisin.'});
         return;
@@ -600,7 +592,7 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
         return;
       }
       oda.bahis = bh;
-      final sf = (m['sifre'] as String? ?? '').trim();
+      final sf = (m['sifre'] is String ? m['sifre'] as String : '').trim();
       if (sf.isNotEmpty) oda.sifre = sf.length > 20 ? sf.substring(0, 20) : sf;
       odalar[oda.kod] = oda;
       b.oda = oda;
@@ -609,16 +601,22 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
       oda.lobiYayinla();
     case 'katil':
       if (!_onlineIzni(b, m)) return;
-      final kod = (m['oda'] as String? ?? '').toUpperCase().trim();
+      final kod = (m['oda'] is String ? m['oda'] as String : '').toUpperCase().trim();
       final oda = odalar[kod];
       if (oda == null) {
-        b.gonder({'t': 'hata', 'm': 'Oda bulunamadı: $kod'});
+        b.gonder({'t': 'hata', 'm': 'Oda bulunamadı: ${kod.length > 8 ? kod.substring(0, 8) : kod}'});
         return;
       }
-      if (oda.sifre != null && (m['sifre'] as String? ?? '').trim() != oda.sifre) {
-        b.gonder({'t': 'hata', 'm': (m['sifre'] as String? ?? '').isEmpty ? 'Bu oda özel, şifre gerekli.' : 'Şifre yanlış.', 'sifre': true});
+      final verilenSifre = (m['sifre'] is String ? m['sifre'] as String : '').trim();
+      if (oda.sifre != null && verilenSifre != oda.sifre) {
+        if (verilenSifre.isNotEmpty && !_oranIzin('odasifre', '${b.kullaniciId ?? b.hashCode}', sinir: 10)) {
+          b.gonder({'t': 'hata', 'm': 'Çok fazla yanlış deneme. Biraz bekle.'});
+          return;
+        }
+        b.gonder({'t': 'hata', 'm': verilenSifre.isEmpty ? 'Bu oda özel, şifre gerekli.' : 'Şifre yanlış.', 'sifre': true});
         return;
       }
+      if (b.oda != oda && !_eskiOdadanCik(b)) return;
       final pr = _profilden(m);
       b.ad = pr.ad;
       if (pr.id != null) {
@@ -626,7 +624,7 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
         cevrimici[pr.id!] = b;
       }
       // aynı adla kopan koltuğa geri dön
-      final eski = oda.koltuklar.where((k) => k.bag == null && k.ad == b.ad).firstOrNull;
+      final eski = oda.koltuklar.where((k) => k.bag == null && k.kullaniciId != null && k.kullaniciId == pr.id).firstOrNull;
       if (eski != null) {
         eski.bag = b;
         eski.kopmaSayaci?.cancel();
@@ -668,18 +666,20 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
     case 'bot':
       final oda = b.oda;
       if (oda == null || oda.sahip != b.koltuk || oda.basladi) return;
-      oda.botSayisi = ((m['bot'] as int?) ?? 1).clamp(0, 3);
+      oda.botSayisi = (m['bot'] is int ? m['bot'] as int : 1).clamp(0, 3);
       oda.lobiYayinla();
     case 'sure':
       final oda = b.oda;
       if (oda == null || oda.sahip != b.koltuk || oda.basladi) return;
-      oda.turSuresi = ((m['sure'] as int?) ?? 120).clamp(0, 180);
+      oda.turSuresi = (m['sure'] is int ? m['sure'] as int : 120).clamp(0, 180);
+      if (oda.bahis > 0 && oda.turSuresi < 30) oda.turSuresi = 30;
       oda.lobiYayinla();
     case 'bahis':
       final oda = b.oda;
       if (oda == null || oda.sahip != b.koltuk || oda.basladi) return;
-      final bh = (m['bahis'] as int?) ?? 0;
+      final bh = m['bahis'] is int ? m['bahis'] as int : 0;
       if (!Oda.bahisSecenekleri.contains(bh)) return;
+      if (bh > 0 && oda.turSuresi < 30) oda.turSuresi = 30;
       final sid = b.kullaniciId;
       if (bh > 0 && sid != null && db.altinOku(sid) < bh) {
         b.gonder({'t': 'hata', 'm': 'Bu oda tutarı için yeterli altının yok ($bh gerekli).'});
@@ -695,7 +695,7 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
       final oda = b.oda;
       final k = b.koltuk;
       if (oda == null || k == null || oda.basladi) return;
-      k.hazir = (m['hazir'] as bool?) ?? true;
+      k.hazir = m['hazir'] is bool ? m['hazir'] as bool : true;
       if (k.hazir && oda.bahis > 0 && k.kullaniciId != null && db.altinOku(k.kullaniciId!) < oda.bahis) {
         k.hazir = false;
         b.gonder({'t': 'hata', 'm': 'Bu oda ${oda.bahis} altınlık, yeterli altının yok.'});
@@ -705,20 +705,20 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
       final oda = b.oda;
       if (oda == null || oda.sahip != b.koltuk || oda.basladi) return;
       oda.basla().catchError((e) {
-        b.gonder({'t': 'hata', 'm': '$e'});
+        b.gonder({'t': 'hata', 'm': e is String ? e : 'Oyun başlatılamadı.'});
         oda.game = null;
       });
     case 'hamle':
       final oda = b.oda;
       final k = b.koltuk;
       if (oda == null || k == null) return;
-      unawaited(oda.hamle(k, m));
+      unawaited(oda.hamle(k, m).catchError((Object e, StackTrace st) => log('hamle hatası: $e\n$st')));
     case 'karar':
-      b.koltuk?.karar?.cevap(m['id'] as int, m['deger']);
+      if (m['id'] is int) b.koltuk?.karar?.cevap(m['id'] as int, m['deger']);
     case 'sohbet':
       final oda = b.oda;
       final k = b.koltuk;
-      var soz = (m['soz'] as String? ?? '').trim();
+      var soz = (m['soz'] is String ? m['soz'] as String : '').trim();
       if (oda == null || k == null || soz.isEmpty || soz.length > 80) return;
       if (DateTime.now().difference(b.sonSohbet) < const Duration(milliseconds: 700)) return; // hız sınırı
       b.sonSohbet = DateTime.now();
@@ -728,7 +728,7 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
       oda.herkeseKimden({'t': 'sohbet', 'kim': kim, 'ad': k.ad, 'soz': soz}, k.kullaniciId);
     case 'kimlik':
       // menüde açık tutulan bağlantı: davet ve bildirim için çevrim içi kaydı
-      final id = db.oturumKim(m['token'] as String?);
+      final id = db.oturumKim(m['token'] is String ? m['token'] as String : null);
       if (id != null && !db.misafirMi(id)) {
         b.kullaniciId = id;
         cevrimici[id] = b;
@@ -738,7 +738,7 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
       }
     case 'davet':
       final oda = b.oda;
-      final hedef = db.idBul(m['nick'] as String? ?? '');
+      final hedef = db.idBul(m['nick'] is String ? m['nick'] as String : '');
       if (oda == null || hedef == null) {
         b.gonder({'t': 'bilgi', 'm': 'Davet gönderilemedi.'});
         return;
@@ -764,30 +764,36 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
         't': 'odalar',
         'liste': [
           for (final o in odalar.values)
-            if (!o.basladi) {'kod': o.kod, 'sahip': o.sahip.ad, 'oyuncu': o.koltuklar.length, 'bot': o.botSayisi, 'sure': o.turSuresi, 'ozel': o.sifre != null, 'bahis': o.bahis}
+            if (!o.basladi && o.sifre == null) {'kod': o.kod, 'sahip': o.sahip.ad, 'oyuncu': o.koltuklar.length, 'bot': o.botSayisi, 'sure': o.turSuresi, 'ozel': o.sifre != null, 'bahis': o.bahis}
         ],
       });
     case 'ping':
       b.gonder({'t': 'pong'});
     default:
-      b.gonder({'t': 'hata', 'm': 'Bilinmeyen mesaj: $t'});
+      b.gonder({'t': 'hata', 'm': 'Bilinmeyen mesaj.'});
   }
 }
 
 /// WS mesajındaki token'dan profil; token yoksa mesajdaki ad ile misafir.
 ({int? id, String ad, String avatar, int level, int ses}) _profilden(Map<String, dynamic> m) {
-  final id = db.oturumKim(m['token'] as String?);
+  final id = db.oturumKim(m['token'] is String ? m['token'] as String : null);
   if (id != null) {
     final p = db.profil(id);
     return (id: id, ad: p['nick'] as String, avatar: p['avatar'] as String, level: p['level'] as int, ses: (p['ses'] as int?) ?? 0);
   }
-  final ad = (m['ad'] as String?)?.trim().isNotEmpty == true ? (m['ad'] as String).trim() : 'Oyuncu';
+  final ham = m['ad'] is String ? (m['ad'] as String).trim() : '';
+  final ad = ham.isNotEmpty ? (ham.length > 16 ? ham.substring(0, 16) : ham) : 'Oyuncu';
   return (id: null, ad: ad.toLowerCase() == 'sen' ? 'Oyuncu' : ad, avatar: '🙂', level: 1, ses: 0);
 }
 
 void kopti(Baglanti b) {
   final kid = b.kullaniciId;
   if (kid != null && cevrimici[kid] == b) cevrimici.remove(kid);
+  _odadanCik(b);
+}
+
+/// Bağlantının koltuğunu odadan ayırır (lobide çıkar, oyunda 30 sn bekleyip bota devreder).
+void _odadanCik(Baglanti b) {
   final oda = b.oda;
   final k = b.koltuk;
   if (oda == null || k == null) return;
@@ -823,12 +829,13 @@ void kopti(Baglanti b) {
   }
 }
 
-/// Sertifika varsa (Let's Encrypt) TLS portunu da açar: wss://emlakdeal.duckdns.org:8766
-const sertifikaDizini = '/etc/letsencrypt/live/emlakdeal.duckdns.org';
-
 Future<void> main(List<String> args) async {
+  // Yakalanmamış bir hata (ör. beklenmeyen istemci verisi) süreci düşürmesin.
+  await runZonedGuarded(() => _ana(args), (e, st) => log('yakalanmamış hata: $e\n$st'));
+}
+
+Future<void> _ana(List<String> args) async {
   final port = args.isNotEmpty ? int.parse(args[0]) : 8765;
-  final tlsPort = args.length > 1 ? int.parse(args[1]) : 8766;
   db = Db('emlakdeal.db');
   void temizle() {
     final t = db.eskiKayitlariTemizle();
@@ -840,22 +847,8 @@ Future<void> main(List<String> args) async {
   if (iade > 0) log('yarım kalan $iade bahis iade edildi');
   Timer.periodic(const Duration(hours: 24), (_) => temizle());
   final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
+  server.idleTimeout = const Duration(seconds: 30);
   log('Emlak Deal sunucusu dinliyor: ws://0.0.0.0:$port');
-  final zincir = File('$sertifikaDizini/fullchain.pem'), anahtar = File('$sertifikaDizini/privkey.pem');
-  if (zincir.existsSync() && anahtar.existsSync()) {
-    try {
-      final ctx = SecurityContext()
-        ..useCertificateChain(zincir.path)
-        ..usePrivateKey(anahtar.path);
-      final tls = await HttpServer.bindSecure(InternetAddress.anyIPv4, tlsPort, ctx);
-      log('TLS dinliyor: wss://0.0.0.0:$tlsPort');
-      unawaited(_dinle(tls));
-    } catch (e) {
-      log('TLS açılamadı: $e');
-    }
-  } else {
-    log('sertifika yok ($sertifikaDizini), yalnız düz ws');
-  }
   await _dinle(server);
 }
 
@@ -971,7 +964,7 @@ class _GovdeCokBuyuk implements Exception {}
 Future<String> _govdeOku(HttpRequest req) async {
   if (req.contentLength > _govdeSiniri) throw _GovdeCokBuyuk();
   final b = BytesBuilder(copy: false);
-  await for (final parca in req) {
+  await for (final parca in req.timeout(const Duration(seconds: 10))) {
     b.add(parca);
     if (b.length > _govdeSiniri) throw _GovdeCokBuyuk();
   }
@@ -982,11 +975,19 @@ Future<String> _govdeOku(HttpRequest req) async {
 String _ip(HttpRequest req) {
   final a = req.connectionInfo?.remoteAddress;
   if (a == null) return '?';
-  if (a.isLoopback || a.isLinkLocal || a.address.startsWith('10.') || a.address.startsWith('192.168.') || a.address.startsWith('172.') || a.address.startsWith('100.')) {
+  if (a.isLoopback || _guvenilenVekil(a.address)) {
     final x = req.headers.value('x-forwarded-for');
     if (x != null && x.trim().isNotEmpty) return x.split(',').first.trim();
   }
   return a.address;
+}
+
+/// X-Forwarded-For'a yalnız ters vekilden (Caddy / Tailscale / Cloudflare tüneli) gelen istekte güvenilir.
+bool _guvenilenVekil(String ip) {
+  final p = ip.split('.');
+  if (p.length != 4) return false;
+  final a = int.tryParse(p[0]) ?? -1, b = int.tryParse(p[1]) ?? -1;
+  return a == 10 || (a == 172 && b >= 16 && b <= 31) || (a == 192 && b == 168) || (a == 100 && b >= 64 && b <= 127);
 }
 
 final _oranKayit = <String, List<DateTime>>{};
@@ -1054,10 +1055,9 @@ Future<void> _fbSilme(HttpRequest req, Map<String, dynamic> govde, void Function
   final fbId = _fbKullanici(sr);
   if (fbId == null) return yaz(400, {'hata': 'Geçersiz istek.'});
   final r = db.fbSilme(fbId);
-  if (r.nick != null) liderlik.sil(r.nick!);
   log('FB silme isteği tamamlandı (${r.kod})');
   final host = req.headers.value('x-forwarded-host') ?? req.headers.value('host') ?? 'localhost';
-  final proto = req.headers.value('x-forwarded-proto') ?? (req.connectionInfo?.localPort == 8766 ? 'https' : 'http');
+  final proto = req.headers.value('x-forwarded-proto') ?? 'http';
   return yaz(200, {'url': '$proto://$host/hesap-sil-durum?kod=${r.kod}', 'confirmation_code': r.kod});
 }
 
@@ -1085,6 +1085,8 @@ Future<void> _api(HttpRequest req) async {
       }
     } on _GovdeCokBuyuk {
       return yaz(413, {'hata': 'İstek çok büyük.'});
+    } on TimeoutException {
+      return yaz(408, {'hata': 'İstek zaman aşımına uğradı.'});
     } catch (_) {}
   }
   final yetki = req.headers.value('authorization');
@@ -1093,16 +1095,19 @@ Future<void> _api(HttpRequest req) async {
   try {
     switch (req.uri.path) {
       case '/api/misafir':
-        final cihaz = (govde['cihaz'] as String? ?? '').trim();
+        final cihaz = (_str(govde['cihaz'], 200) ?? '').trim();
         if (cihaz.length < 8) return yaz(400, {'hata': 'cihaz anahtarı yok'});
-        final r = db.misafir(cihaz, nick: govde['nick'] as String?, avatar: govde['avatar'] as String?);
+        if (!db.cihazVar(cihaz) && !_oranIzin('misafir', _ip(req), sinir: 5)) return yaz(429, {'hata': 'Çok fazla istek.'});
+        final r = db.misafir(cihaz, nick: _str(govde['nick'], 40), avatar: _str(govde['avatar'], 40));
         return yaz(200, {'token': r.token, 'yeni': r.yeni, 'profil': db.profil(r.id)});
       case '/api/giris':
-        final ep = (govde['eposta'] as String? ?? '').trim().toLowerCase();
+        final ep = (_str(govde['eposta'], 200) ?? '').trim().toLowerCase();
+        if (!_oranIzin('giris', _ip(req), sinir: 20)) return yaz(429, {'hata': 'Çok fazla deneme. Biraz sonra tekrar dene.'});
         final simdi = DateTime.now();
+        if (_girisHatalari.length > 5000) _girisHatalari.removeWhere((_, l) => l.isEmpty || simdi.difference(l.last).inMinutes >= 10);
         final denemeler = (_girisHatalari[ep] ?? []).where((t) => simdi.difference(t).inMinutes < 10).toList();
         if (denemeler.length >= 8) return yaz(429, {'hata': 'Çok fazla yanlış deneme. 10 dakika sonra tekrar dene.'});
-        final r = db.epostaGiris(ep, govde['sifre'] as String? ?? '', misafir: kim);
+        final r = await db.epostaGiris(ep, _str(govde['sifre'], 200) ?? '', misafir: kim);
         if (r == null) {
           _girisHatalari[ep] = [...denemeler, simdi];
           return yaz(401, {'hata': 'E-posta ya da şifre yanlış.'});
@@ -1110,8 +1115,9 @@ Future<void> _api(HttpRequest req) async {
         _girisHatalari.remove(ep);
         return yaz(200, {'token': r.token, 'birlesti': r.birlesti, 'profil': db.profil(r.id)});
       case '/api/sosyal':
-        final sag = govde['saglayici'] as String? ?? '';
-        final k = await _sosyalDogrula(sag, govde['token'] as String? ?? '');
+        final sag = _str(govde['saglayici'], 20) ?? '';
+        if (!_oranIzin('sosyal', _ip(req), sinir: 20)) return yaz(429, {'hata': 'Çok fazla istek.'});
+        final k = await _sosyalDogrula(sag, _str(govde['token'], 8000) ?? '');
         if (k.hata != null) return yaz(k.hata!.startsWith('yapılandırılmadı') ? 501 : 401, {'hata': k.hata});
         final onceki = kim;
         final r = db.sosyal(sag, k.kimlik!, bagla: onceki, nick: k.ad);
@@ -1124,20 +1130,24 @@ Future<void> _api(HttpRequest req) async {
         if (kim == null) return yaz(401, {'hata': 'oturum yok'});
         if (req.method == 'POST') {
           if (db.misafirMi(kim)) return yaz(403, {'hata': 'Misafir hesapta profil değiştirilemez. Giriş yap.', 'misafir': true});
-          final h = db.profilGuncelle(kim, nick: govde['nick'] as String?, avatar: govde['avatar'] as String?, ses: govde['ses'] as int?);
+          final h = db.profilGuncelle(kim, nick: _str(govde['nick'], 40), avatar: _str(govde['avatar'], 40), ses: govde['ses'] is int ? govde['ses'] as int : null);
           if (h != null) return yaz(400, {'hata': h});
         }
         return yaz(200, db.profil(kim));
       case '/api/eposta':
         if (kim == null) return yaz(401, {'hata': 'oturum yok'});
-        final h = db.epostaBagla(kim, (govde['eposta'] as String? ?? '').trim(), govde['sifre'] as String? ?? '');
+        if (!_oranIzin('eposta', '$kim', sinir: 10)) return yaz(429, {'hata': 'Çok fazla istek.'});
+        final h = await db.epostaBagla(kim, (_str(govde['eposta'], 200) ?? '').trim(), _str(govde['sifre'], 200) ?? '');
         if (h != null) return yaz(400, {'hata': h});
         return yaz(200, db.profil(kim));
       case '/api/sonuc':
         if (kim == null) return yaz(401, {'hata': 'oturum yok'});
-        final r = db.sonuc(kim, kazandi: govde['kazandi'] == true, rakip: (govde['rakip'] as int? ?? 1).clamp(1, 4), online: false, zorluk: (govde['zorluk'] as int? ?? 1).clamp(0, 2));
-        for (final b in (govde['basarimlar'] as List? ?? const [])) {
-          db.basarimEkle(kim, '$b');
+        // bir bot oyunu bu kadar kısa sürmez: sahte sonuç yağmuruna karşı dakikada en çok 2
+        if (!_oranIzin('sonuc', '$kim', sinir: 2)) return yaz(429, {'hata': 'Çok fazla istek.'});
+        final r = db.sonuc(kim, kazandi: govde['kazandi'] == true, rakip: (govde['rakip'] is int ? govde['rakip'] as int : 1).clamp(1, 4), online: false, zorluk: (govde['zorluk'] is int ? govde['zorluk'] as int : 1).clamp(0, 2));
+        final bl = govde['basarimlar'];
+        for (final b in (bl is List ? bl.take(30) : const [])) {
+          if (b is String) db.basarimEkle(kim, b);
         }
         return yaz(200, r);
       case '/api/gorevler':
@@ -1148,7 +1158,7 @@ Future<void> _api(HttpRequest req) async {
         if (kim == null) return yaz(401, {'hata': 'oturum yok'});
         if (req.method != 'POST') return yaz(405, {'hata': 'POST gerekli'});
         if (db.misafirMi(kim)) return yaz(403, {'hata': 'Günlük görevler için giriş yapmalısın.', 'misafir': true});
-        final gr = db.gorevAl(kim, govde['gorev'] as String? ?? '');
+        final gr = db.gorevAl(kim, _str(govde['gorev'], 40) ?? '');
         if (gr == null) return yaz(400, {'hata': 'Görev ödülü alınamaz.'});
         return yaz(200, {...gr, 'gorevler': db.gorevler(kim), 'profil': db.profil(kim)});
       case '/api/bonus':
@@ -1162,28 +1172,29 @@ Future<void> _api(HttpRequest req) async {
       case '/api/satin_al':
         if (kim == null) return yaz(401, {'hata': 'oturum yok'});
         if (db.misafirMi(kim)) return yaz(403, {'hata': 'Satın almak için giriş yapmalısın.', 'misafir': true});
-        final h = db.satinAl(kim, govde['esya'] as String? ?? '');
+        final h = db.satinAl(kim, _str(govde['esya'], 40) ?? '');
         if (h != null) return yaz(400, {'hata': h});
         return yaz(200, db.profil(kim));
       case '/api/secim':
         if (kim == null) return yaz(401, {'hata': 'oturum yok'});
-        final h = db.secimKaydet(kim, kartArkasi: govde['kartArkasi'] as String?, masa: govde['masa'] as String?);
+        final h = db.secimKaydet(kim, kartArkasi: _str(govde['kartArkasi'], 40), masa: _str(govde['masa'], 40));
         if (h != null) return yaz(400, {'hata': h});
         return yaz(200, db.profil(kim));
       case '/api/arkadaslar':
         if (kim == null) return yaz(401, {'hata': 'oturum yok'});
         if (req.method == 'POST') {
           if (db.misafirMi(kim)) return yaz(403, {'hata': 'Arkadaşlar için giriş yapmalısın.', 'misafir': true});
+          if (!_oranIzin('arkadas', '$kim', sinir: 20)) return yaz(429, {'hata': 'Çok fazla istek.'});
           if (govde['sil'] == true) {
-            db.arkadasSil(kim, govde['nick'] as String? ?? '');
+            db.arkadasSil(kim, _str(govde['nick'], 40) ?? '');
           } else {
-            final h = db.arkadasEkle(kim, govde['nick'] as String? ?? '');
+            final h = db.arkadasEkle(kim, _str(govde['nick'], 40) ?? '');
             if (h != null) return yaz(400, {'hata': h});
           }
         }
         final l = db.arkadaslar(kim);
         for (final a in l) {
-          final c = cevrimici[a['id'] as int];
+          final c = a['karsilikli'] == true ? cevrimici[a['id'] as int] : null;
           a['cevrimici'] = c != null && c.ws.readyState == WebSocket.open;
           a['odada'] = c?.oda?.kod;
         }
@@ -1230,13 +1241,12 @@ Future<void> _api(HttpRequest req) async {
         if (govde['onay'] != 'SIL') return yaz(400, {'hata': 'Onay gerekli.'});
         final silDeneme = (_girisHatalari['sil:$kim'] ?? []).where((t) => DateTime.now().difference(t).inMinutes < 10).toList();
         if (silDeneme.length >= 5) return yaz(429, {'hata': 'Çok fazla yanlış deneme. 10 dakika sonra tekrar dene.'});
-        final sr = db.hesapSil(kim, parola: _str(govde['parola'], 200));
+        final sr = await db.hesapSil(kim, parola: _str(govde['parola'], 200));
         if (sr.hata != null) {
           _girisHatalari['sil:$kim'] = [...silDeneme, DateTime.now()];
           return yaz(403, {'hata': sr.hata});
         }
         _girisHatalari.remove('sil:$kim');
-        if (sr.nick != null) liderlik.sil(sr.nick!);
         final bag = cevrimici.remove(kim);
         log('HESAP SİLİNDİ (id $kim)');
         yaz(200, {'ok': true});
@@ -1256,7 +1266,7 @@ Future<void> _api(HttpRequest req) async {
       case '/api/yonetim/hatalar':
         if (_yonetimAnahtar.isEmpty) return yaz(503, {'hata': 'Yönetim devre dışı.'});
         if (!_oranIzin('yonetim', _ip(req))) return yaz(429, {'hata': 'Çok fazla istek.'});
-        if (!_anahtarDogru(req.uri.queryParameters['anahtar'] ?? _str(govde['anahtar'], 200))) return yaz(403, {'hata': 'Anahtar yanlış.'});
+        if (!_anahtarDogru(req.headers.value('x-yonetim-anahtar') ?? _str(govde['anahtar'], 200) ?? req.uri.queryParameters['anahtar'])) return yaz(403, {'hata': 'Anahtar yanlış.'});
         if (req.uri.path == '/api/yonetim/hatalar') return yaz(200, db.hatalarListe());
         if (req.uri.path == '/api/yonetim/sikayetler') return yaz(200, db.sikayetListe());
         if (req.method != 'POST') return yaz(405, {'hata': 'POST gerekli'});
@@ -1264,88 +1274,132 @@ Future<void> _api(HttpRequest req) async {
         if (dh != null) return yaz(400, {'hata': dh});
         return yaz(200, {'ok': true});
       case '/api/olay':
-        db.olayKaydet(kullaniciId: kim, ad: govde['ad'] as String? ?? '?', veri: govde['veri'] == null ? null : jsonEncode(govde['veri']));
+        if (kim == null) return yaz(401, {'hata': 'oturum yok'});
+        if (!_oranIzin('olay', '$kim', sinir: 20)) return yaz(429, {'hata': 'Çok fazla istek.'});
+        final veri = govde['veri'] == null ? null : jsonEncode(govde['veri']);
+        db.olayKaydet(kullaniciId: kim, ad: _str(govde['ad'], 40) ?? '?', veri: veri == null ? null : _str(veri, 4000));
         return yaz(200, {'ok': true});
       case '/api/ozet':
+        if (_yonetimAnahtar.isEmpty) return yaz(503, {'hata': 'Yönetim devre dışı.'});
+        if (!_oranIzin('yonetim', _ip(req))) return yaz(429, {'hata': 'Çok fazla istek.'});
+        if (!_anahtarDogru(req.headers.value('x-yonetim-anahtar') ?? req.uri.queryParameters['anahtar'])) return yaz(403, {'hata': 'Anahtar yanlış.'});
         return yaz(200, db.ozet());
       default:
         return yaz(404, {'hata': 'yok'});
     }
   } catch (e, st) {
     log('api hatası ${req.uri.path}: $e\n$st');
-    yaz(500, {'hata': '$e'});
+    try {
+      yaz(500, {'hata': 'Sunucu hatası.'});
+    } catch (_) {}
   }
 }
 
+/// IP başına açık WebSocket sayısı (tek kaynaktan bağlantı yağmuruna karşı).
+final _ipBaglanti = <String, int>{};
+const _ipBaglantiSiniri = 20;
+const _wsMesajSiniri = 16 * 1024;
+const _wsSaniyelikSinir = 30;
+
 Future<void> _dinle(HttpServer server) async {
   await for (final req in server) {
-    if (req.uri.path == '/saglik') {
-      req.response
-        ..write('ok odalar=${odalar.length}')
-        ..close();
-      continue;
-    }
-    if (req.uri.path == '/liderlik') {
-      req.response
-        ..headers.contentType = ContentType.json
-        ..write(jsonEncode(liderlik.sirali()))
-        ..close();
-      continue;
-    }
-    if (req.method == 'GET' || req.method == 'HEAD') {
-      final yasalSayfa = switch (req.uri.path) {
-        '/gizlilik' => gizlilikSayfasi(en: ingilizceMi(req)),
-        '/hesap-sil' => hesapSilSayfasi(en: ingilizceMi(req)),
-        '/kosullar' => kosullarSayfasi(en: ingilizceMi(req)),
-        '/hesap-sil-durum' => () {
-            final kod = (req.uri.queryParameters['kod'] ?? '').trim();
-            final kayit = kod.length > 64 ? null : db.fbSilmeDurumu(kod);
-            return silmeDurumSayfasi(en: ingilizceMi(req), kod: kod.length > 64 ? '' : kod, kayit: kayit);
-          }(),
-        _ => null,
-      };
-      if (yasalSayfa != null) {
-        req.response
-          ..headers.contentType = ContentType.html
-          ..headers.set('cache-control', 'public, max-age=300')
-          ..write(req.method == 'HEAD' ? '' : yasalSayfa);
-        await req.response.close();
-        continue;
-      }
-    }
-    if (req.uri.path.startsWith('/api/')) {
-      await _api(req);
-      continue;
-    }
-    if (req.uri.path == '/sonuc' && req.method == 'POST') {
+    // Her istek ayrı işlenir: yavaş bir istemci (yarım gövde, uzun dış doğrulama) diğerlerini bekletmez.
+    unawaited(_istek(req).catchError((Object e, StackTrace st) {
+      log('istek hatası ${req.uri.path}: $e\n$st');
       try {
-        final j = jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>;
-        liderlik.kaydet(j['ad'] as String, j['kazandi'] == true);
-        req.response.write('ok');
-      } catch (e) {
         req.response
-          ..statusCode = 400
-          ..write('$e');
-      }
-      await req.response.close();
-      continue;
-    }
-    if (!WebSocketTransformer.isUpgradeRequest(req)) {
-      req.response
-        ..statusCode = 400
-        ..write('WebSocket bekleniyor')
-        ..close();
-      continue;
-    }
-    final ws = await WebSocketTransformer.upgrade(req);
-    final b = Baglanti(ws);
-    ws.listen((veri) {
-      try {
-        mesaj(b, jsonDecode(veri as String) as Map<String, dynamic>);
-      } catch (e, st) {
-        log('mesaj hatası: $e\n$st');
-        b.gonder({'t': 'hata', 'm': '$e'});
-      }
-    }, onDone: () => kopti(b), onError: (_) => kopti(b));
+          ..statusCode = 500
+          ..close();
+      } catch (_) {}
+    }));
   }
+}
+
+Future<void> _istek(HttpRequest req) async {
+  if (req.uri.path == '/saglik') {
+    req.response.write('ok odalar=${odalar.length}');
+    await req.response.close();
+    return;
+  }
+  if (req.method == 'GET' || req.method == 'HEAD') {
+    final yasalSayfa = switch (req.uri.path) {
+      '/gizlilik' => gizlilikSayfasi(en: ingilizceMi(req)),
+      '/hesap-sil' => hesapSilSayfasi(en: ingilizceMi(req)),
+      '/kosullar' => kosullarSayfasi(en: ingilizceMi(req)),
+      '/hesap-sil-durum' => () {
+          final kod = (req.uri.queryParameters['kod'] ?? '').trim();
+          final kayit = kod.length > 64 ? null : db.fbSilmeDurumu(kod);
+          return silmeDurumSayfasi(en: ingilizceMi(req), kod: kod.length > 64 ? '' : kod, kayit: kayit);
+        }(),
+      _ => null,
+    };
+    if (yasalSayfa != null) {
+      req.response
+        ..headers.contentType = ContentType.html
+        ..headers.set('cache-control', 'public, max-age=300')
+        ..headers.set('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+        ..headers.set('x-frame-options', 'DENY')
+        ..headers.set('referrer-policy', 'no-referrer')
+        ..headers.set('x-content-type-options', 'nosniff')
+        ..write(req.method == 'HEAD' ? '' : yasalSayfa);
+      await req.response.close();
+      return;
+    }
+  }
+  if (req.uri.path.startsWith('/api/')) {
+    req.response.headers.set('x-content-type-options', 'nosniff');
+    await _api(req);
+    return;
+  }
+  if (!WebSocketTransformer.isUpgradeRequest(req)) {
+    req.response
+      ..statusCode = 400
+      ..write('WebSocket bekleniyor');
+    await req.response.close();
+    return;
+  }
+  final ip = _ip(req);
+  if ((_ipBaglanti[ip] ?? 0) >= _ipBaglantiSiniri) {
+    req.response.statusCode = 429;
+    await req.response.close();
+    return;
+  }
+  final ws = await WebSocketTransformer.upgrade(req);
+  ws.pingInterval = const Duration(seconds: 30);
+  _ipBaglanti[ip] = (_ipBaglanti[ip] ?? 0) + 1;
+  final b = Baglanti(ws);
+  var pencere = DateTime.now();
+  var sayac = 0;
+  var kapandi = false;
+  void bitir() {
+    if (kapandi) return;
+    kapandi = true;
+    final n = (_ipBaglanti[ip] ?? 1) - 1;
+    if (n <= 0) {
+      _ipBaglanti.remove(ip);
+    } else {
+      _ipBaglanti[ip] = n;
+    }
+    kopti(b);
+  }
+
+  ws.listen((veri) {
+    final simdi = DateTime.now();
+    if (simdi.difference(pencere).inSeconds >= 1) {
+      pencere = simdi;
+      sayac = 0;
+    }
+    if (++sayac > _wsSaniyelikSinir || veri is! String || veri.length > _wsMesajSiniri) {
+      log('bağlantı kapatıldı ($ip): sınır aşıldı');
+      ws.close(WebSocketStatus.policyViolation);
+      return;
+    }
+    try {
+      final j = jsonDecode(veri);
+      if (j is Map<String, dynamic>) mesaj(b, j);
+    } catch (e, st) {
+      log('mesaj hatası: $e\n$st');
+      b.gonder({'t': 'hata', 'm': 'Geçersiz mesaj.'});
+    }
+  }, onDone: bitir, onError: (_) => bitir(), cancelOnError: true);
 }

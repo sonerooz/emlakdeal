@@ -57,8 +57,10 @@ class _LobiEkraniState extends State<LobiEkrani> {
         net = Istemci(Ayarlar.o.sunucu);
         await net.baglan();
       } catch (e) {
-        // ev içindeyken dış adres (hairpin NAT) çalışmayabilir: yerel adresi dene
-        net = Istemci(Ayarlar.sunucuYerel);
+        // debug: ev içindeyken dış adres (hairpin NAT) çalışmayabilir, yerel adresi dene
+        final yerel = Ayarlar.sunucuYerel;
+        if (yerel == null) rethrow;
+        net = Istemci(yerel);
         await net.baglan();
       }
       _net = net;

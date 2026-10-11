@@ -420,7 +420,7 @@ class _ProfilEkraniState extends State<ProfilEkrani> {
   Widget _epostaFormu({required bool girisVar}) => Column(children: [
         TextField(controller: _eposta, keyboardType: TextInputType.emailAddress, style: const TextStyle(color: Colors.white), decoration: _dec(t('E-posta'))),
         const SizedBox(height: 8),
-        TextField(controller: _sifre, obscureText: true, style: const TextStyle(color: Colors.white), decoration: _dec(t('Şifre (en az 6)'))),
+        TextField(controller: _sifre, obscureText: true, style: const TextStyle(color: Colors.white), decoration: _dec(t('Şifre (en az 8)'))),
         const SizedBox(height: 8),
         Row(children: [
           Expanded(

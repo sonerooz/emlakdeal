@@ -1,6 +1,7 @@
 // Üyelik veritabanı (SQLite): hesaplar, oturumlar, oyun geçmişi, başarımlar.
 // Google/Facebook/Apple kimlikleri için sütunlar hazır; şimdilik misafir (cihaz anahtarı) ve e-posta/şifre.
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
@@ -164,7 +165,26 @@ class Db {
     _db.execute('CREATE INDEX IF NOT EXISTS ix_gecmis_kullanici ON oyun_gecmisi(kullanici_id)');
     _db.execute('CREATE INDEX IF NOT EXISTS ix_lider ON kullanicilar(level DESC, xp DESC)');
     _misafirleriAdlandir();
+    _guvenlikGocu();
   }
+
+  /// Eski kayıtları güvenli biçime taşır: düz metin oturum token'ları özetlenir,
+  /// girişli hesaplardaki cihaz anahtarı (şifresiz giriş yolu) kaldırılır.
+  void _guvenlikGocu() {
+    final eski = _db.select('SELECT token FROM oturumlar WHERE length(token) != 64');
+    if (eski.isNotEmpty) {
+      _db.execute('BEGIN');
+      for (final r in eski) {
+        final t = r['token'] as String;
+        _db.execute('UPDATE OR IGNORE oturumlar SET token = ? WHERE token = ?', [_tokenOzet(t), t]);
+      }
+      _db.execute('DELETE FROM oturumlar WHERE length(token) != 64');
+      _db.execute('COMMIT');
+    }
+    _db.execute('UPDATE kullanicilar SET cihaz_anahtari = NULL WHERE cihaz_anahtari IS NOT NULL AND $_girisli');
+  }
+
+  bool cihazVar(String cihaz) => _db.select('SELECT 1 FROM kullanicilar WHERE cihaz_anahtari = ?', [cihaz]).isNotEmpty;
 
   static const _girisli = '(eposta IS NOT NULL OR google_id IS NOT NULL OR facebook_id IS NOT NULL OR apple_id IS NOT NULL)';
 
@@ -194,6 +214,8 @@ class Db {
 
   /// Bağlanan misafir emoji avatarına kavuşur; istenen ad geçerliyse Misafir-xxxxx adının yerine geçer.
   void _misafirdenCik(int id, String? istenen) {
+    // girişli hesaba cihaz anahtarıyla şifresiz girilemesin
+    _db.execute('UPDATE kullanicilar SET cihaz_anahtari = NULL WHERE id = ?', [id]);
     final r = _db.select('SELECT nick, avatar FROM kullanicilar WHERE id = ?', [id]).first;
     if (r['avatar'] == 'misafir') {
       _db.execute('UPDATE kullanicilar SET avatar = ? WHERE id = ?', [avatarlar[_rng.nextInt(avatarlar.length)], id]);
@@ -215,7 +237,7 @@ class Db {
     _db.execute('DELETE FROM hatalar WHERE COALESCE(son_gorulme, tarih) < ?', [sinir]);
     _db.execute('DELETE FROM olaylar WHERE tarih < ?', [sinir]);
     _db.execute("DELETE FROM sikayetler WHERE zaman < ? AND durum != 'yeni'", [sinir]);
-    _db.execute('DELETE FROM oturumlar WHERE son_kullanim < ?', [_onceki(const Duration(days: 180))]);
+    _db.execute('DELETE FROM oturumlar WHERE son_kullanim < ? OR olusturma < ?', [_onceki(const Duration(days: 180)), _onceki(const Duration(days: 365))]);
     final oturum = _db.updatedRows;
     final eski = _db.select(
         'SELECT id FROM kullanicilar WHERE eposta IS NULL AND google_id IS NULL AND facebook_id IS NULL AND apple_id IS NULL AND son_giris < ?',
@@ -229,7 +251,68 @@ class Db {
   String _onceki(Duration d) => DateTime.now().toUtc().subtract(d).toIso8601String();
   String _simdi() => DateTime.now().toUtc().toIso8601String();
   String _token() => base64Url.encode(List<int>.generate(32, (_) => _rng.nextInt(256)));
+
+  /// Oturum token'ı DB'de yalnız SHA-256 özetiyle tutulur (DB/yedek sızarsa oturum çalınamasın).
+  static String _tokenOzet(String t) => sha256.convert(utf8.encode(t)).toString();
+
+  /// Eski biçim (tek tur SHA-256): yalnız doğrulama ve yükseltme için.
   String sifreHash(String sifre, String tuz) => sha256.convert(utf8.encode('$tuz:$sifre')).toString();
+
+  static const _pbkdf2Tur = 100000;
+
+  /// PBKDF2-HMAC-SHA256 (32 bayt).
+  static List<int> _pbkdf2(String sifre, List<int> tuz, int tur) {
+    final hmac = Hmac(sha256, utf8.encode(sifre));
+    var u = hmac.convert([...tuz, 0, 0, 0, 1]).bytes;
+    final t = List<int>.of(u);
+    for (var i = 1; i < tur; i++) {
+      u = hmac.convert(u).bytes;
+      for (var j = 0; j < t.length; j++) {
+        t[j] ^= u[j];
+      }
+    }
+    return t;
+  }
+
+  /// PBKDF2 ayrı isolate'ta hesaplanır: tek iş parçacıklı sunucu giriş denemeleri sırasında donmasın.
+  static Future<List<int>> _pbkdf2Arka(String sifre, List<int> tuz, int tur) => Isolate.run(() => _pbkdf2(sifre, tuz, tur));
+
+  /// Saklanacak şifre kaydı: p2$tur$tuz$özet (base64url).
+  Future<String> sifreKaydi(String sifre) async {
+    final tuz = List<int>.generate(16, (_) => _rng.nextInt(256));
+    final oz = await _pbkdf2Arka(sifre, tuz, _pbkdf2Tur);
+    return 'p2\$$_pbkdf2Tur\$${base64Url.encode(tuz)}\$${base64Url.encode(oz)}';
+  }
+
+  /// Şifre doğru mu; eski biçimse [yukselt] true döner (girişte yeni biçime çevrilir).
+  Future<({bool dogru, bool yukselt})> sifreDogru(String sifre, String? kayit) async {
+    if (kayit == null) return (dogru: false, yukselt: false);
+    final p = kayit.split(r'$');
+    bool esit(List<int> a, List<int> b) {
+      if (a.length != b.length) return false;
+      var f = 0;
+      for (var i = 0; i < a.length; i++) {
+        f |= a[i] ^ b[i];
+      }
+      return f == 0;
+    }
+
+    if (p.length == 4 && p[0] == 'p2') {
+      final tur = int.tryParse(p[1]) ?? 0;
+      if (tur < 1 || tur > 2000000) return (dogru: false, yukselt: false);
+      try {
+        final ok = esit(await _pbkdf2Arka(sifre, base64Url.decode(p[2]), tur), base64Url.decode(p[3]));
+        return (dogru: ok, yukselt: ok && tur < _pbkdf2Tur);
+      } catch (_) {
+        return (dogru: false, yukselt: false);
+      }
+    }
+    if (p.length == 2) {
+      final ok = esit(utf8.encode(sifreHash(sifre, p[0])), utf8.encode(p[1]));
+      return (dogru: ok, yukselt: ok);
+    }
+    return (dogru: false, yukselt: false);
+  }
 
   static final nickKurali = RegExp(r'^[A-Za-zÇĞİÖŞÜçğıöşü0-9_ ]{3,16}$');
 
@@ -368,9 +451,15 @@ class Db {
     if (_db.select("SELECT 1 FROM emanetler WHERE kullanici_id = ? AND durum = 'acik'", [misafir]).isNotEmpty) return false;
     _db.execute('BEGIN');
     try {
+      // Misafir altını hedefin günlük bot kotasından düşülerek taşınır: çok sayıda misafirle altın basılamasın.
+      final misafirAltin = _db.select('SELECT altin FROM kullanicilar WHERE id = ?', [misafir]).first['altin'] as int;
+      final kota = _kotaOku(hedef);
+      final tasinan = min(max(0, misafirAltin), kota.kalan);
+      if (tasinan > 0) {
+        _db.execute('UPDATE kullanicilar SET altin = altin + ?, gunluk_tarih = ?, gunluk_bot_altin = ? WHERE id = ?', [tasinan, _bugun().tarih, kota.kullanilan + tasinan, hedef]);
+      }
       _db.execute('''
         UPDATE kullanicilar SET
-          altin = altin + (SELECT altin FROM kullanicilar WHERE id = ?1),
           oyun = oyun + (SELECT oyun FROM kullanicilar WHERE id = ?1),
           galibiyet = galibiyet + (SELECT galibiyet FROM kullanicilar WHERE id = ?1),
           online_oyun = online_oyun + (SELECT online_oyun FROM kullanicilar WHERE id = ?1),
@@ -395,22 +484,26 @@ class Db {
   }
 
   /// E-posta/şifre: kayıt (hesaba bağlama) ya da giriş. Hata metni döner, null = başarılı.
-  String? epostaBagla(int id, String eposta, String sifre) {
+  Future<String?> epostaBagla(int id, String eposta, String sifre) async {
     if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(eposta)) return 'Geçersiz e-posta.';
-    if (sifre.length < 6) return 'Şifre en az 6 karakter.';
+    if (sifre.length < 8) return 'Şifre en az 8 karakter.';
+    if (_db.select('SELECT 1 FROM kullanicilar WHERE id = ? AND eposta IS NOT NULL', [id]).isNotEmpty) return 'Bu hesaba zaten bir e-posta bağlı.';
     if (_db.select('SELECT 1 FROM kullanicilar WHERE eposta = ? AND id != ?', [eposta, id]).isNotEmpty) return 'Bu e-posta başka hesapta.';
-    final tuz = _token().substring(0, 12);
-    _db.execute('UPDATE kullanicilar SET eposta = ?, sifre_hash = ? WHERE id = ?', [eposta, '$tuz\$${sifreHash(sifre, tuz)}', id]);
+    final kayit = await sifreKaydi(sifre);
+    if (_db.select('SELECT 1 FROM kullanicilar WHERE eposta = ? AND id != ?', [eposta, id]).isNotEmpty) return 'Bu e-posta başka hesapta.';
+    _db.execute('UPDATE kullanicilar SET eposta = ?, sifre_hash = ? WHERE id = ?', [eposta, kayit, id]);
     _misafirdenCik(id, null);
     return null;
   }
 
-  ({int id, String token, bool birlesti})? epostaGiris(String eposta, String sifre, {int? misafir}) {
+  Future<({int id, String token, bool birlesti})?> epostaGiris(String eposta, String sifre, {int? misafir}) async {
     final r = _db.select('SELECT id, sifre_hash FROM kullanicilar WHERE eposta = ?', [eposta]);
     if (r.isEmpty || r.first['sifre_hash'] == null) return null;
-    final parcalar = (r.first['sifre_hash'] as String).split(r'$');
-    if (parcalar.length != 2 || sifreHash(sifre, parcalar[0]) != parcalar[1]) return null;
+    final d = await sifreDogru(sifre, r.first['sifre_hash'] as String?);
+    if (!d.dogru) return null;
     final id = r.first['id'] as int;
+    if (d.yukselt) _db.execute('UPDATE kullanicilar SET sifre_hash = ? WHERE id = ?', [await sifreKaydi(sifre), id]);
+    if (_db.select('SELECT 1 FROM kullanicilar WHERE id = ?', [id]).isEmpty) return null;
     _db.execute('UPDATE kullanicilar SET son_giris = ? WHERE id = ?', [_simdi(), id]);
     final birlesti = misafir != null && birlestir(misafir, id);
     return (id: id, token: oturumAc(id), birlesti: birlesti);
@@ -418,17 +511,18 @@ class Db {
 
   String oturumAc(int id) {
     final t = _token();
-    _db.execute('INSERT INTO oturumlar (token, kullanici_id, olusturma, son_kullanim) VALUES (?, ?, ?, ?)', [t, id, _simdi(), _simdi()]);
+    _db.execute('INSERT INTO oturumlar (token, kullanici_id, olusturma, son_kullanim) VALUES (?, ?, ?, ?)', [_tokenOzet(t), id, _simdi(), _simdi()]);
     return t;
   }
 
-  void oturumKapat(String token) => _db.execute('DELETE FROM oturumlar WHERE token = ?', [token]);
+  void oturumKapat(String token) => _db.execute('DELETE FROM oturumlar WHERE token = ?', [_tokenOzet(token)]);
 
   int? oturumKim(String? token) {
-    if (token == null || token.isEmpty) return null;
-    final r = _db.select('SELECT kullanici_id FROM oturumlar WHERE token = ?', [token]);
+    if (token == null || token.isEmpty || token.length > 200) return null;
+    final oz = _tokenOzet(token);
+    final r = _db.select('SELECT kullanici_id FROM oturumlar WHERE token = ?', [oz]);
     if (r.isEmpty) return null;
-    _db.execute('UPDATE oturumlar SET son_kullanim = ? WHERE token = ?', [_simdi(), token]);
+    _db.execute('UPDATE oturumlar SET son_kullanim = ? WHERE token = ?', [_simdi(), oz]);
     return r.first['kullanici_id'] as int;
   }
 
@@ -628,6 +722,8 @@ class Db {
   }
 
   void basarimEkle(int id, String basarim) {
+    if (!RegExp(r'^[a-z0-9_]{2,32}$').hasMatch(basarim)) return;
+    if ((_db.select('SELECT COUNT(*) AS n FROM basarimlar WHERE kullanici_id = ?', [id]).first['n'] as int) >= 100) return;
     _db.execute('INSERT OR IGNORE INTO basarimlar (kullanici_id, basarim, tarih) VALUES (?, ?, ?)', [id, basarim, _simdi()]);
   }
 
@@ -686,8 +782,11 @@ class Db {
   }
 
   List<Map<String, dynamic>> arkadaslar(int id) => [
-        for (final r in _db.select('SELECT k.id, k.nick, k.avatar, k.level, k.son_giris FROM arkadaslar a JOIN kullanicilar k ON k.id = a.arkadas_id WHERE a.kullanici_id = ? ORDER BY k.nick', [id]))
-          {'id': r['id'], 'nick': r['nick'], 'avatar': r['avatar'], 'level': r['level'], 'sonGiris': r['son_giris']}
+        // son giriş ve (sunucuda) çevrim içi/oda bilgisi yalnız karşılıklı arkadaşa açılır: tek taraflı ekleyen takip edemesin
+        for (final r in _db.select('''SELECT k.id, k.nick, k.avatar, k.level, k.son_giris,
+              EXISTS (SELECT 1 FROM arkadaslar b WHERE b.kullanici_id = k.id AND b.arkadas_id = a.kullanici_id) AS karsilikli
+            FROM arkadaslar a JOIN kullanicilar k ON k.id = a.arkadas_id WHERE a.kullanici_id = ? ORDER BY k.nick''', [id]))
+          {'id': r['id'], 'nick': r['nick'], 'avatar': r['avatar'], 'level': r['level'], 'sonGiris': r['karsilikli'] == 1 ? r['son_giris'] : null, 'karsilikli': r['karsilikli'] == 1}
       ];
 
   int? idBul(String nick) {
@@ -863,6 +962,8 @@ class Db {
       }
       _db.execute('DELETE FROM arkadaslar WHERE kullanici_id = ? OR arkadas_id = ?', [id, id]);
       _db.execute('DELETE FROM engeller WHERE kim = ? OR hedef = ?', [id, id]);
+      _db.execute('DELETE FROM gorevler WHERE kullanici_id = ?', [id]);
+      _db.execute("DELETE FROM emanetler WHERE kullanici_id = ? AND durum != 'acik'", [id]);
       _db.execute('UPDATE sikayetler SET kim = NULL, notu = NULL WHERE kim = ?', [id]);
       _db.execute('UPDATE sikayetler SET hedef = NULL, notu = NULL WHERE hedef = ?', [id]);
       _db.execute('UPDATE hatalar SET kullanici_id = NULL WHERE kullanici_id = ?', [id]);
@@ -876,14 +977,12 @@ class Db {
   }
 
   /// Hesabı kalıcı siler (tek işlem). Şifreli hesapta [parola] doğrulanır. Dönen nick liderlik temizliği içindir.
-  ({String? hata, String? nick}) hesapSil(int id, {String? parola}) {
+  Future<({String? hata, String? nick})> hesapSil(int id, {String? parola}) async {
     final r = _db.select('SELECT nick, sifre_hash FROM kullanicilar WHERE id = ?', [id]);
     if (r.isEmpty) return (hata: 'Hesap bulunamadı.', nick: null);
     final h = r.first['sifre_hash'] as String?;
-    if (h != null) {
-      final p = h.split(r'$');
-      if (parola == null || p.length != 2 || sifreHash(parola, p[0]) != p[1]) return (hata: 'Şifre yanlış.', nick: null);
-    }
+    if (h != null && (parola == null || !(await sifreDogru(parola, h)).dogru)) return (hata: 'Şifre yanlış.', nick: null);
+    if (_db.select('SELECT 1 FROM kullanicilar WHERE id = ?', [id]).isEmpty) return (hata: 'Hesap bulunamadı.', nick: null);
     final nick = r.first['nick'] as String;
     _hesapSilIc(id);
     return (hata: null, nick: nick);

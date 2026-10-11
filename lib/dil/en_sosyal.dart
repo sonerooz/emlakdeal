@@ -164,7 +164,7 @@ const Map<String, String> enSosyal = {
   '{ad} bağlı': '{ad} linked',
   '{ad} ile bağlan': 'Connect with {ad}',
   'E-posta': 'Email',
-  'Şifre (en az 6)': 'Password (min. 6)',
+  'Şifre (en az 8)': 'Password (min. 8)',
   'E-postayı bu hesaba bağla': 'Link email to this account',
   'Mevcut hesaba giriş yap': 'Sign in to an existing account',
   'Atla': 'Skip',
