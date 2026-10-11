@@ -42,7 +42,11 @@ class Dil extends ChangeNotifier {
 }
 
 /// Çeviri: anahtar Türkçe metin; `{ad}` yer tutucular [a] ile doldurulur. Karşılık yoksa Türkçe döner.
-String t(String tr, [Map<String, Object?>? a]) {
+/// Para birimi ekranda ₺ olarak yazılır ([paraYaz]).
+String t(String tr, [Map<String, Object?>? a]) => paraYaz(tHam(tr, a));
+
+/// [t]'nin ₺ dönüşümü yapılmamış hali (metni anahtar olarak karşılaştıranlar için).
+String tHam(String tr, [Map<String, Object?>? a]) {
   var s = Dil.o.en ? (Dil.o._ara(tr) ?? tr) : tr;
   if (a != null) {
     a.forEach((k, v) => s = s.replaceAll('{$k}', '$v'));
@@ -50,5 +54,11 @@ String t(String tr, [Map<String, Object?>? a]) {
   return s;
 }
 
+/// Oyun parası: motor, sunucu ve ses klipleri "5M" (milyon) der; ekranda "5₺" gösterilir.
+String para(Object v) => '$v₺';
+
+final _paraRe = RegExp(r'(\d+)M\b');
+String paraYaz(String s) => s.contains('M') ? s.replaceAllMapped(_paraRe, (m) => para(m[1]!)) : s;
+
 /// Oyun içi konuşma / hızlı sohbet cümlesi: tel üzerinde hep Türkçe taşınır, alıcı kendi dilinde görür ve duyar.
-String sozGoster(String trSoz) => Dil.o.en ? (sozEn(trSoz) ?? t(trSoz)) : trSoz;
+String sozGoster(String trSoz) => paraYaz(Dil.o.en ? (sozEn(trSoz) ?? tHam(trSoz)) : trSoz);

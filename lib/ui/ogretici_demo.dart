@@ -315,7 +315,7 @@ class _DemoKiraState extends _DS<DemoKira> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(10)),
-                child: Text(oynandi ? '🤖 Bot $i → ${kiraTutari}M 💸' : '🤖 Bot $i', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                child: Text(oynandi ? '🤖 Bot $i → ${para(kiraTutari)} 💸' : '🤖 Bot $i', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
               ),
           ]),
           const SizedBox(height: 8),
@@ -636,7 +636,7 @@ class _DemoEvState extends _DS<DemoEv> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(10)),
-              child: Text('${evKondu ? '🏠 ' : ''}${otelKondu ? '🏨 ' : ''}${t('Kira')}: ${kira}M', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 16)),
+              child: Text('${evKondu ? '🏠 ' : ''}${otelKondu ? '🏨 ' : ''}${t('Kira')}: ${para(kira)}', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 16)),
             ),
           ]),
           const SizedBox(height: 8),

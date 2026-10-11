@@ -14,6 +14,7 @@ const Map<String, String> enVeri = {
   'Lacivert': 'Navy',
   'Siyah': 'Black',
   'Turkuaz': 'Turquoise',
+  'Pembe': 'Pink',
   'Ulaşım': 'Transport',
   'Altyapı': 'Utilities',
   // --- ulaşım / altyapı tapuları

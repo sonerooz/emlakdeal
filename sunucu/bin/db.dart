@@ -204,14 +204,26 @@ class Db {
   }
 
   final Database _db;
+
+  void testSql(String q) => _db.execute(q);
+  int testSayi(String q) => _db.select(q).first.values.first as int;
   final _rng = Random.secure();
 
-  /// Gizlilik politikasındaki ~12 ay saklama süresi: eski hata, olay ve işlenmiş şikayet kayıtlarını siler.
-  void eskiKayitlariTemizle() {
+  /// Gizlilik politikasındaki saklama süreleri: ~12 ay hata/olay/işlenmiş şikayet, 18 ay kullanılmayan misafir hesap, 180 gün kullanılmayan oturum.
+  ({int misafir, int oturum}) eskiKayitlariTemizle() {
     final sinir = _onceki(const Duration(days: 365));
     _db.execute('DELETE FROM hatalar WHERE COALESCE(son_gorulme, tarih) < ?', [sinir]);
     _db.execute('DELETE FROM olaylar WHERE tarih < ?', [sinir]);
     _db.execute("DELETE FROM sikayetler WHERE zaman < ? AND durum != 'yeni'", [sinir]);
+    _db.execute('DELETE FROM oturumlar WHERE son_kullanim < ?', [_onceki(const Duration(days: 180))]);
+    final oturum = _db.updatedRows;
+    final eski = _db.select(
+        'SELECT id FROM kullanicilar WHERE eposta IS NULL AND google_id IS NULL AND facebook_id IS NULL AND apple_id IS NULL AND son_giris < ?',
+        [_onceki(const Duration(days: 548))]);
+    for (final r in eski) {
+      _hesapSilIc(r['id'] as int);
+    }
+    return (misafir: eski.length, oturum: oturum);
   }
 
   String _onceki(Duration d) => DateTime.now().toUtc().subtract(d).toIso8601String();
@@ -324,23 +336,62 @@ class Db {
     return (id: id, token: oturumAc(id), yeni: true);
   }
 
-  /// Sosyal kimlik (google/facebook/apple): varsa giriş, yoksa [cihazId] hesabına bağla ya da yeni hesap.
-  ({int id, String token}) sosyal(String saglayici, String kimlik, {int? bagla, String? nick}) {
+  /// Sosyal kimlik (google/facebook/apple): varsa giriş, yoksa [bagla] hesabına bağla ya da yeni hesap.
+  /// Kimlik başka bir hesaba aitse ve [bagla] bir misafir hesapsa, misafirin ilerlemesi o hesaba birleştirilir.
+  ({int? id, String? token, bool birlesti, String? hata}) sosyal(String saglayici, String kimlik, {int? bagla, String? nick}) {
     final sutun = '${saglayici}_id';
     final mevcut = _db.select('SELECT id FROM kullanicilar WHERE $sutun = ?', [kimlik]);
     if (mevcut.isNotEmpty) {
       final id = mevcut.first['id'] as int;
-      return (id: id, token: oturumAc(id));
+      final birlesti = bagla != null && bagla != id && birlestir(bagla, id);
+      _db.execute('UPDATE kullanicilar SET son_giris = ? WHERE id = ?', [_simdi(), id]);
+      return (id: id, token: oturumAc(id), birlesti: birlesti, hata: null);
     }
     if (bagla != null) {
+      if (_db.select('SELECT 1 FROM kullanicilar WHERE id = ? AND $sutun IS NOT NULL', [bagla]).isNotEmpty) {
+        return (id: null, token: null, birlesti: false, hata: 'Bu hesaba zaten başka bir $saglayici hesabı bağlı. Önce çıkış yapıp o hesapla giriş yapabilirsin.');
+      }
       _db.execute('UPDATE kullanicilar SET $sutun = ? WHERE id = ?', [kimlik, bagla]);
       _misafirdenCik(bagla, nick);
-      return (id: bagla, token: oturumAc(bagla));
+      return (id: bagla, token: oturumAc(bagla), birlesti: false, hata: null);
     }
     final ad = nickUret(nick);
     _db.execute('INSERT INTO kullanicilar (nick, avatar, $sutun, olusturma, son_giris) VALUES (?, ?, ?, ?, ?)', [ad, avatarlar[_rng.nextInt(avatarlar.length)], kimlik, _simdi(), _simdi()]);
     final id = _db.lastInsertRowId;
-    return (id: id, token: oturumAc(id));
+    return (id: id, token: oturumAc(id), birlesti: false, hata: null);
+  }
+
+  /// Hiçbir hesaba bağlı olmayan [misafir] hesabın ilerlemesini (altın, XP, istatistik, geçmiş, başarım, eşya, arkadaş) [hedef] hesaba taşır ve misafiri siler.
+  /// Misafir değilse, aynı hesapsa ya da açık bahis emaneti varsa hiçbir şey yapmaz (false).
+  bool birlestir(int misafir, int hedef) {
+    if (misafir == hedef || !misafirMi(misafir)) return false;
+    if (_db.select("SELECT 1 FROM emanetler WHERE kullanici_id = ? AND durum = 'acik'", [misafir]).isNotEmpty) return false;
+    _db.execute('BEGIN');
+    try {
+      _db.execute('''
+        UPDATE kullanicilar SET
+          altin = altin + (SELECT altin FROM kullanicilar WHERE id = ?1),
+          oyun = oyun + (SELECT oyun FROM kullanicilar WHERE id = ?1),
+          galibiyet = galibiyet + (SELECT galibiyet FROM kullanicilar WHERE id = ?1),
+          online_oyun = online_oyun + (SELECT online_oyun FROM kullanicilar WHERE id = ?1),
+          online_galibiyet = online_galibiyet + (SELECT online_galibiyet FROM kullanicilar WHERE id = ?1)
+        WHERE id = ?2''', [misafir, hedef]);
+      final xp = _db.select('SELECT xp FROM kullanicilar WHERE id = ?', [misafir]).first['xp'] as int;
+      _xpEkle(hedef, xp);
+      _db.execute('UPDATE oyun_gecmisi SET kullanici_id = ? WHERE kullanici_id = ?', [hedef, misafir]);
+      _db.execute('INSERT OR IGNORE INTO basarimlar (kullanici_id, basarim, tarih) SELECT ?, basarim, tarih FROM basarimlar WHERE kullanici_id = ?', [hedef, misafir]);
+      _db.execute('INSERT OR IGNORE INTO esyalar (kullanici_id, esya, tarih) SELECT ?, esya, tarih FROM esyalar WHERE kullanici_id = ?', [hedef, misafir]);
+      _db.execute('INSERT OR IGNORE INTO arkadaslar (kullanici_id, arkadas_id, tarih) SELECT ?1, arkadas_id, tarih FROM arkadaslar WHERE kullanici_id = ?2 AND arkadas_id != ?1', [hedef, misafir]);
+      _db.execute('INSERT OR IGNORE INTO arkadaslar (kullanici_id, arkadas_id, tarih) SELECT kullanici_id, ?1, tarih FROM arkadaslar WHERE arkadas_id = ?2 AND kullanici_id != ?1', [hedef, misafir]);
+      _db.execute('INSERT OR IGNORE INTO engeller (kim, hedef, zaman) SELECT ?1, hedef, zaman FROM engeller WHERE kim = ?2 AND hedef != ?1', [hedef, misafir]);
+      _db.execute('INSERT OR IGNORE INTO engeller (kim, hedef, zaman) SELECT kim, ?1, zaman FROM engeller WHERE hedef = ?2 AND kim != ?1', [hedef, misafir]);
+      _db.execute('COMMIT');
+    } catch (_) {
+      _db.execute('ROLLBACK');
+      rethrow;
+    }
+    _hesapSilIc(misafir);
+    return true;
   }
 
   /// E-posta/şifre: kayıt (hesaba bağlama) ya da giriş. Hata metni döner, null = başarılı.
@@ -354,14 +405,15 @@ class Db {
     return null;
   }
 
-  ({int id, String token})? epostaGiris(String eposta, String sifre) {
+  ({int id, String token, bool birlesti})? epostaGiris(String eposta, String sifre, {int? misafir}) {
     final r = _db.select('SELECT id, sifre_hash FROM kullanicilar WHERE eposta = ?', [eposta]);
     if (r.isEmpty || r.first['sifre_hash'] == null) return null;
     final parcalar = (r.first['sifre_hash'] as String).split(r'$');
     if (parcalar.length != 2 || sifreHash(sifre, parcalar[0]) != parcalar[1]) return null;
     final id = r.first['id'] as int;
     _db.execute('UPDATE kullanicilar SET son_giris = ? WHERE id = ?', [_simdi(), id]);
-    return (id: id, token: oturumAc(id));
+    final birlesti = misafir != null && birlestir(misafir, id);
+    return (id: id, token: oturumAc(id), birlesti: birlesti);
   }
 
   String oturumAc(int id) {

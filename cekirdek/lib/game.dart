@@ -3,7 +3,7 @@ import 'cards.dart';
 
 /// Bir oyuncunun karar verme arayüzü. İnsan için UI diyalogları, bot için sezgisel.
 abstract class Decider {
-  /// Sana oynanan [aciklama] aksiyonuna karşı Just Say No oynamak ister misin? (elinde varsa sorulur)
+  /// Sana oynanan [aciklama] aksiyonuna karşı Reddet oynamak ister misin? (elinde varsa sorulur)
   Future<bool> justSayNo(Game g, Player me, String aciklama);
 
   /// [tutar] M öde: banka + mülklerden kart seç. Toplam varlık yetmiyorsa hepsini verir.
@@ -348,36 +348,6 @@ class Game extends Bildirici {
   }
 
   // ----------------------------------------------------------- ödeme
-  Future<void> _tahsil(Player borclu, Player alacakli, int tutar, String sebep) async {
-    if (tutar <= 0) return;
-    if (borclu.varliklar.isEmpty) {
-      _log('${borclu.name} ödeyecek hiçbir şeyi yok.');
-      return;
-    }
-    List<GameCard> odeme;
-    if (borclu.varlikToplam <= tutar) {
-      odeme = List.of(borclu.varliklar);
-    } else {
-      odeme = await borclu.decider.ode(this, borclu, tutar, alacakli);
-    }
-    var toplam = 0;
-    for (final c in odeme) {
-      await _anim(GameEvent(EvTip.transfer, c, kim: borclu, kime: alacakli, etiket: sebep));
-      borclu.kartiCikar(c);
-      toplam += c.paraDegeri;
-      if (c.isProperty) {
-        alacakli.mulkEkle(c, c.etkinRenk ?? c.colors.first);
-      } else if (c.action == ActionType.house || c.action == ActionType.hotel) {
-        alacakli.bank.add(GameCard.para(paraId++, c.paraDegeri));
-      } else {
-        alacakli.bank.add(c);
-      }
-    }
-    _log('${borclu.name} → ${alacakli.name}: $sebep için ${toplam}M ödedi.');
-    _kazananKontrol();
-    notifyListeners();
-  }
-
   // ----------------------------------------------------------- para talebi (öde ya da reddet)
   /// Kira/borç/doğum günü: hedef tek karar verir — öder ya da Reddet oynar. Reddedilirse
   /// saldıran kendi Reddet'iyle karşı çıkabilir; o zaman hedef yeniden karar verir (zincir).
@@ -447,7 +417,7 @@ class Game extends Bildirici {
     notifyListeners();
   }
 
-  // ----------------------------------------------------------- Just Say No zinciri
+  // ----------------------------------------------------------- Reddet zinciri
   /// [hedef] JSN oynarsa aksiyon iptal olur; saldıran JSN ile karşı çıkabilir (zincir).
   /// true = aksiyon İPTAL edildi.
   Future<bool> _jsnZinciri(Player saldiran, Player hedef, String aciklama) async {
@@ -510,7 +480,7 @@ class Game extends Bildirici {
   Future<bool> _dogumGunu(Player p, GameCard c) async {
     if (!_oynayabilir() || c.action != ActionType.birthday) return false;
     await _sozBitsin(p);
-    await _soyle(p, 'Bugün doğum günüm! Herkesten 2M istiyorum.');
+    await _soyle(p, 'Ev partisi! Herkesten 2M istiyorum.');
     await _aksiyonuAt(p, c);
     _log('${p.name} Ev Partisi: herkes 2M veriyor.');
     for (final r in players.where((x) => x != p)) {

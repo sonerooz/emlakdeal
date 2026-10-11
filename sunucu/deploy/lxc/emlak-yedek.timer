@@ -1,0 +1,7 @@
+[Unit]
+Description=Emlak Deal gunluk yedek
+[Timer]
+OnCalendar=*-*-* 04:10:00
+Persistent=true
+[Install]
+WantedBy=timers.target

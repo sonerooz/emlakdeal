@@ -15,7 +15,7 @@ const Map<String, String> enAna = {
   'Kolay': 'Easy',
   'Normal': 'Normal',
   'Zor': 'Hard',
-  'Kolay bot fırsatların bir kısmını kaçırır, Reddet kartını nadiren kullanır.': 'Easy bots miss some opportunities and rarely use the Just Say No card.',
+  'Kolay bot fırsatların bir kısmını kaçırır, Reddet kartını nadiren kullanır.': 'Easy bots miss some opportunities and rarely use the Reject card.',
   'Normal bot mantıklı oynar.': 'Normal bots play sensibly.',
   'Zor bot her fırsatı kullanır, elini erken zenginleştirir.': 'Hard bots take every opportunity and build up their hand early.',
   'Oyunu başlat': 'Start game',

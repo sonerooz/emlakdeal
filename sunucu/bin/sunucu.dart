@@ -830,10 +830,15 @@ Future<void> main(List<String> args) async {
   final port = args.isNotEmpty ? int.parse(args[0]) : 8765;
   final tlsPort = args.length > 1 ? int.parse(args[1]) : 8766;
   db = Db('emlakdeal.db');
-  db.eskiKayitlariTemizle();
+  void temizle() {
+    final t = db.eskiKayitlariTemizle();
+    if (t.misafir > 0 || t.oturum > 0) log('temizlik: ${t.misafir} eski misafir hesap, ${t.oturum} eski oturum silindi');
+  }
+
+  temizle();
   final iade = db.acikEmanetleriIadeEt();
   if (iade > 0) log('yarım kalan $iade bahis iade edildi');
-  Timer.periodic(const Duration(hours: 24), (_) => db.eskiKayitlariTemizle());
+  Timer.periodic(const Duration(hours: 24), (_) => temizle());
   final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
   log('Emlak Deal sunucusu dinliyor: ws://0.0.0.0:$port');
   final zincir = File('$sertifikaDizini/fullchain.pem'), anahtar = File('$sertifikaDizini/privkey.pem');
@@ -1097,20 +1102,21 @@ Future<void> _api(HttpRequest req) async {
         final simdi = DateTime.now();
         final denemeler = (_girisHatalari[ep] ?? []).where((t) => simdi.difference(t).inMinutes < 10).toList();
         if (denemeler.length >= 8) return yaz(429, {'hata': 'Çok fazla yanlış deneme. 10 dakika sonra tekrar dene.'});
-        final r = db.epostaGiris(ep, govde['sifre'] as String? ?? '');
+        final r = db.epostaGiris(ep, govde['sifre'] as String? ?? '', misafir: kim);
         if (r == null) {
           _girisHatalari[ep] = [...denemeler, simdi];
           return yaz(401, {'hata': 'E-posta ya da şifre yanlış.'});
         }
         _girisHatalari.remove(ep);
-        return yaz(200, {'token': r.token, 'profil': db.profil(r.id)});
+        return yaz(200, {'token': r.token, 'birlesti': r.birlesti, 'profil': db.profil(r.id)});
       case '/api/sosyal':
         final sag = govde['saglayici'] as String? ?? '';
         final k = await _sosyalDogrula(sag, govde['token'] as String? ?? '');
         if (k.hata != null) return yaz(k.hata!.startsWith('yapılandırılmadı') ? 501 : 401, {'hata': k.hata});
         final onceki = kim;
         final r = db.sosyal(sag, k.kimlik!, bagla: onceki, nick: k.ad);
-        return yaz(200, {'token': r.token, 'degisti': onceki != null && r.id != onceki, 'profil': db.profil(r.id)});
+        if (r.hata != null) return yaz(409, {'hata': r.hata});
+        return yaz(200, {'token': r.token, 'degisti': onceki != null && r.id != onceki, 'birlesti': r.birlesti, 'profil': db.profil(r.id!)});
       case '/api/cikis':
         if (token != null) db.oturumKapat(token);
         return yaz(200, {'tamam': true});

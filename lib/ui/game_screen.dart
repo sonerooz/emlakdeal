@@ -78,6 +78,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   final List<MasaUcus> _masaUcanlar = [];
   final _kMasa = GlobalKey();
   String? _banner;
+  GameCard? _buyukKart;
+  String _buyukYazi = '';
+  Completer<void>? _buyukBitir;
   Player? _konusan;
   final AudioPlayer _klip = AudioPlayer();
   final AudioPlayer _sohbetKlip = AudioPlayer();
@@ -621,6 +624,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
 
   Offset _elNoktasi(Player p) => p == ben ? _nokta(_kBenEl) : _nokta(_kBotEl[p]);
 
+  /// Oynanan kartı ekranın ortasında büyük gösterir; süre dolunca ya da dokununca kapanır.
+  Future<void> _buyukGoster(GameCard c, String yazi, int ms) async {
+    if (!mounted) return;
+    final bitir = Completer<void>();
+    _buyukBitir = bitir;
+    setState(() {
+      _buyukKart = c;
+      _buyukYazi = yazi;
+    });
+    await Future.any([Future.delayed(Duration(milliseconds: ms)), bitir.future]);
+    if (!mounted) return;
+    if (identical(_buyukBitir, bitir)) {
+      _buyukBitir = null;
+      setState(() => _buyukKart = null);
+    }
+  }
+
   Future<void> _animasyon(GameEvent e) async {
     if (!mounted) return;
     if (_acikDeste != null) setState(() => _acikDeste = null);
@@ -641,6 +661,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
         }
         await Future.delayed(const Duration(milliseconds: 120));
       case EvTip.mulk:
+        await _buyukGoster(e.card, adim, kim == ben ? 600 : 1100);
         _efektCal('ef_damga.wav');
         await _masaUcur(e.card, elM(kim!), setM(kim), ms: 520, w: kim == ben ? 56 : 46);
         final renk = e.renk;
@@ -648,17 +669,17 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
           _efektCal('ef_set.wav', ikinci: true);
         }
       case EvTip.banka:
+        await _buyukGoster(e.card, adim, kim == ben ? 600 : 1100);
         _efektCal('ef_coin.wav');
         await _masaUcur(e.card, elM(kim!), bankaM(kim), ms: 480, w: kim == ben ? 56 : 46);
       case EvTip.aksiyon:
-        final orta = Offset((deste.dx + yakilan.dx) / 2, deste.dy - 90);
-        await _masaUcur(e.card, elM(kim!), orta, ms: 460, w: 56, scaleTo: 1.8);
+        final yazi = '$adim: ${e.etiket != null ? _bas(oyunMetin(e.etiket!)) : e.card.adT}';
         if (!mounted) return;
-        setState(() => _banner = '$adim: ${e.etiket != null ? _bas(oyunMetin(e.etiket!)) : e.card.adT}');
-        await Future.delayed(Duration(milliseconds: kim == ben ? 700 : 1100));
+        setState(() => _banner = yazi);
+        await _buyukGoster(e.card, yazi, kim == ben ? 900 : 1500);
         if (!mounted) return;
         setState(() => _banner = null);
-        await _masaUcur(e.card, orta, yakilan, ms: 320, w: 100, scaleTo: 0.64);
+        await _masaUcur(e.card, elM(kim!), yakilan, ms: 420, w: 56, scaleTo: 64 / 56);
       case EvTip.transfer:
         final from = e.card.isProperty ? setM(kim!) : bankaM(kim!);
         final to = e.card.isProperty ? setM(e.kime!) : bankaM(e.kime!);
@@ -839,7 +860,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     } catch (_) {}
   }
 
-  bool get _sirada => _hazir && game.aktif == ben && game.kazanan == null && !_botOynuyor && _ucanlar.isEmpty && _masaUcanlar.isEmpty;
+  bool get _sirada => _hazir && game.aktif == ben && game.kazanan == null && !_botOynuyor && _ucanlar.isEmpty && _masaUcanlar.isEmpty && _buyukKart == null;
 
   void _mesaj(String s) => ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
@@ -1267,6 +1288,33 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
                     );
                   },
                 ),
+              if (_buyukKart != null)
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      final b = _buyukBitir;
+                      if (b != null && !b.isCompleted) b.complete();
+                    },
+                    child: ColoredBox(
+                      color: Colors.black45,
+                      child: Center(
+                        child: TweenAnimationBuilder<double>(
+                          key: ObjectKey(_buyukBitir),
+                          tween: Tween(begin: 0, end: 1),
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutBack,
+                          builder: (_, v, child) => Opacity(opacity: v.clamp(0.0, 1.0), child: Transform.scale(scale: 0.7 + 0.3 * v, child: child)),
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            CardView(_buyukKart!, w: min(MediaQuery.of(context).size.width * 0.5, 190.0)),
+                            const SizedBox(height: 14),
+                            Text(_buyukYazi, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, decoration: TextDecoration.none)),
+                          ]),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               if (_sohbetBalon != null)
                 Positioned(
                   right: 12,
@@ -1362,7 +1410,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
         w: w,
         acik: _acikDeste == '$kim:banka',
         ustBaslik: t('🏦 {n} kart', {'n': p.bank.length}),
-        altBaslik: '${p.bankaToplam}M',
+        altBaslik: para(p.bankaToplam),
         vurgu: false,
         renk: const Color(0xFF1E7B3A),
         onTap: () => setState(() => _acikDeste = _acikDeste == '$kim:banka' ? null : '$kim:banka'),

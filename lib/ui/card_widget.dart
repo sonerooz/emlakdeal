@@ -19,6 +19,7 @@ const _silAd = {
   PColor.darkBlue: 'istanbul',
   PColor.railroad: 'ulasim',
   PColor.utility: 'altyapi',
+  PColor.rose: 'kocaeli',
 };
 
 double _lum(Color c) => 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
@@ -96,7 +97,7 @@ class CardView extends StatelessWidget {
         border: Border.all(color: _krem, width: 2.5),
         boxShadow: const [BoxShadow(color: Color(0x80000000), blurRadius: 5, offset: Offset(0, 2))],
       ),
-      child: _x('${v}M', 14, color: v == 1 ? _kahve : Colors.white, fw: FontWeight.w900, ls: -0.5, h: 1, sh: v == 1 ? null : const [Shadow(color: Color(0x55000000), blurRadius: 2, offset: Offset(0, 1))]),
+      child: _x(para(v), 14, color: v == 1 ? _kahve : Colors.white, fw: FontWeight.w900, ls: -0.5, h: 1, sh: v == 1 ? null : const [Shadow(color: Color(0x55000000), blurRadius: 2, offset: Offset(0, 1))]),
     );
     return Positioned(
       left: ters ? null : 7,
@@ -120,7 +121,7 @@ class CardView extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 1.5),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           _x(l, soluk ? fs - 1 : fs, color: soluk ? _soluk : _kahve, fw: FontWeight.w500, h: 1.15),
-          _x('${v}M', soluk ? fs - 1 : fs, fw: FontWeight.w800, h: 1.15),
+          _x(para(v), soluk ? fs - 1 : fs, fw: FontWeight.w800, h: 1.15),
         ]),
       );
 
@@ -312,13 +313,13 @@ class CardView extends StatelessWidget {
             decoration: BoxDecoration(border: Border.all(color: const Color(0x88FFFFFF), width: 1.5), borderRadius: BorderRadius.circular(8)),
           ),
         ),
-        Positioned(left: 12, top: 9, child: _x('${v}M', 20, color: Colors.white, fw: FontWeight.w900, h: 1, sh: golge)),
-        Positioned(right: 12, bottom: 9, child: _x('${v}M', 20, color: Colors.white, fw: FontWeight.w900, h: 1, sh: golge)),
+        Positioned(left: 12, top: 9, child: _x(para(v), 20, color: Colors.white, fw: FontWeight.w900, h: 1, sh: golge)),
+        Positioned(right: 12, bottom: 9, child: _x(para(v), 20, color: Colors.white, fw: FontWeight.w900, h: 1, sh: golge)),
         Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            _x('${v}M', 46, color: Colors.white, fw: FontWeight.w900, h: 1, sh: golge),
+            _x(para(v), 46, color: Colors.white, fw: FontWeight.w900, h: 1, sh: golge),
             const SizedBox(height: 6),
-            _x(t(_paraAd[v] ?? '${v}M'), 9, color: Colors.white, ls: 2, sh: golge),
+            _x(t(_paraAd[v] ?? para(v)), 9, color: Colors.white, ls: 2, sh: golge),
           ]),
         ),
       ]),

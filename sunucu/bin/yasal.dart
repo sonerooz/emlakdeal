@@ -137,7 +137,7 @@ String gizlilikSayfasi({required bool en}) {
 <h2>4. Saklama süresi</h2>
 <ul>
 <li>Hesap verileri, hesabını silene kadar saklanır.</li>
-<li>Uzun süre kullanılmayan misafir hesaplar silinebilir.</li>
+<li>Hiçbir hesaba (Google, Facebook, e-posta) bağlanmamış misafir hesaplar, yaklaşık 18 ay hiç girilmezse otomatik silinir.</li>
 <li>Hata raporları ve kullanım olayları sınırlı süre (en çok yaklaşık 12 ay) saklanır; hesap silindikten sonra kimliğinle ilişkilendirilmez.</li>
 <li>IP adresi içeren sunucu günlükleri döndürülür ve kısa süre saklanır.</li>
 <li>Diğer oyunculara ilişkin şikayetler moderasyon için saklanır; hesabını silersen içlerindeki kişisel alanlar anonimleştirilir.</li>

@@ -1,7 +1,7 @@
 import 'dart:math';
 
-/// Mülk renkleri (10 set).
-enum PColor { brown, lightBlue, pink, orange, red, yellow, green, darkBlue, railroad, utility }
+/// Mülk renkleri (11 set). Sıra kayıt/ağ biçiminde indeks olarak kullanılır; yenisi hep sona eklenir.
+enum PColor { brown, lightBlue, pink, orange, red, yellow, green, darkBlue, railroad, utility, rose }
 
 extension PColorX on PColor {
   String get ad => const {
@@ -15,6 +15,7 @@ extension PColorX on PColor {
         PColor.darkBlue: 'Lacivert',
         PColor.railroad: 'Siyah',
         PColor.utility: 'Turkuaz',
+        PColor.rose: 'Pembe',
       }[this]!;
 
   /// Kart üstünde kullanılan kısa ad (uzun adlar sığmıyor).
@@ -29,6 +30,7 @@ extension PColorX on PColor {
         PColor.darkBlue: 'Lacivert',
         PColor.railroad: 'Siyah',
         PColor.utility: 'Turkuaz',
+        PColor.rose: 'Pembe',
       }[this]!;
 
   /// Seti tamamlamak için gereken mülk sayısı.
@@ -43,6 +45,7 @@ extension PColorX on PColor {
         PColor.darkBlue: 2,
         PColor.railroad: 4,
         PColor.utility: 2,
+        PColor.rose: 3,
       }[this]!;
 
   /// Kira tablosu: n mülk için kira (index n-1).
@@ -57,6 +60,7 @@ extension PColorX on PColor {
         PColor.darkBlue: [3, 8],
         PColor.railroad: [1, 2, 3, 4],
         PColor.utility: [1, 2],
+        PColor.rose: [2, 3, 5],
       }[this]!;
 
   /// Mülk kartının para değeri.
@@ -71,6 +75,7 @@ extension PColorX on PColor {
         PColor.darkBlue: 4,
         PColor.railroad: 2,
         PColor.utility: 2,
+        PColor.rose: 2,
       }[this]!;
 
   bool get binaOlur => this != PColor.railroad && this != PColor.utility;
@@ -88,6 +93,7 @@ extension PColorX on PColor {
         PColor.darkBlue: 'İstanbul',
         PColor.railroad: 'Ulaşım',
         PColor.utility: 'Altyapı',
+        PColor.rose: 'Kocaeli',
       }[this]!;
 
   /// Setteki tapu adları: o şehrin en büyük/bilinen ilçeleri (pahalıdan ucuza).
@@ -102,6 +108,7 @@ extension PColorX on PColor {
         PColor.darkBlue: ['Beşiktaş', 'Kadıköy'],
         PColor.railroad: ['Sabiha Gökçen Havalimanı', 'Esenboğa Havalimanı', 'Eskihisar Feribot İskelesi', 'Topçular Feribot İskelesi'],
         PColor.utility: ['Doğalgaz İdaresi', 'Telekom Altyapısı'],
+        PColor.rose: ['Gebze', 'İzmit', 'Körfez'],
       }[this]!;
 }
 
@@ -267,18 +274,18 @@ class GameCard {
       for (var i = 0; i < adet; i++) d.add(f(id++));
     }
 
-    // Para (20)
-    for (final e in {1: 6, 2: 5, 3: 3, 4: 3, 5: 2, 10: 1}.entries) {
+    // Para (24)
+    for (final e in {1: 7, 2: 6, 3: 4, 4: 3, 5: 3, 10: 1}.entries) {
       ekle((i) => GameCard._(id: i, kind: CardKind.money, value: e.key), e.value);
     }
-    // Mülkler (28)
+    // Mülkler (31)
     for (final c in PColor.values) {
       for (var k = 0; k < c.setBoyu; k++) {
         final ad = k < c.sokaklar.length ? c.sokaklar[k] : null;
         d.add(GameCard._(id: id++, kind: CardKind.property, color: c, sokak: ad));
       }
     }
-    // Joker mülkler (11)
+    // Joker mülkler (12)
     GameCard w(int i, List<PColor> cs, int v) =>
         GameCard._(id: i, kind: CardKind.wild, colors: cs, value: v);
     ekle((i) => w(i, [PColor.pink, PColor.orange], 2), 2);
@@ -288,25 +295,26 @@ class GameCard {
     ekle((i) => w(i, [PColor.darkBlue, PColor.green], 4), 1);
     ekle((i) => w(i, [PColor.railroad, PColor.green], 4), 1);
     ekle((i) => w(i, [PColor.railroad, PColor.utility], 2), 1);
+    ekle((i) => w(i, [PColor.rose, PColor.brown], 2), 1);
     ekle((i) => w(i, const [], 0), 2); // çok renkli joker (değeri 0)
-    // Aksiyonlar (34)
+    // Aksiyonlar (40)
     GameCard a(int i, ActionType t) =>
         GameCard._(id: i, kind: CardKind.action, action: t, value: t.deger);
     for (final e in {
       ActionType.dealBreaker: 2,
       ActionType.justSayNo: 3,
-      ActionType.slyDeal: 3,
-      ActionType.forcedDeal: 3,
+      ActionType.slyDeal: 4,
+      ActionType.forcedDeal: 4,
       ActionType.tahsilat: 3,
-      ActionType.birthday: 3,
-      ActionType.passGo: 10,
+      ActionType.birthday: 4,
+      ActionType.passGo: 13,
       ActionType.house: 3,
       ActionType.hotel: 2,
       ActionType.doubleRent: 2,
     }.entries) {
       ekle((i) => a(i, e.key), e.value);
     }
-    // Kira (13)
+    // Kira (15)
     GameCard r(int i, List<PColor> cs, int v) =>
         GameCard._(id: i, kind: CardKind.rent, rentColors: cs, value: v);
     ekle((i) => r(i, [PColor.darkBlue, PColor.green], 1), 2);
@@ -314,8 +322,9 @@ class GameCard {
     ekle((i) => r(i, [PColor.pink, PColor.orange], 1), 2);
     ekle((i) => r(i, [PColor.lightBlue, PColor.brown], 1), 2);
     ekle((i) => r(i, [PColor.railroad, PColor.utility], 1), 2);
+    ekle((i) => r(i, [PColor.rose, PColor.brown], 1), 2);
     ekle((i) => r(i, const [], 3), 3);
-    assert(d.length == 106);
+    assert(d.length == 122);
     d.shuffle(Random());
     return d;
   }

@@ -115,9 +115,6 @@ class _ProfilEkraniState extends State<ProfilEkrani> {
   }
 
   Future<void> _sosyalGiris(String saglayici, String ad) async {
-    if (h.misafir && ((h.profil?['oyun'] as int?) ?? 0) > 0) {
-      if (!await _onay(t('{ad} ile giriş', {'ad': ad}), t('Bu {ad} hesabı daha önce kullanıldıysa o hesabın ilerlemesi açılır ve bu cihazdaki misafir ilerlemen (Seviye {lv}) bırakılır. İlk kez kullanılıyorsa misafir ilerlemen hesaba bağlanır. Devam edilsin mi?', {'ad': ad, 'lv': h.level}))) return;
-    }
     setState(() {
       _mesgul = true;
       _mesaj = null;
@@ -126,7 +123,7 @@ class _ProfilEkraniState extends State<ProfilEkrani> {
     if (mounted) {
       setState(() {
         _mesgul = false;
-        _mesaj = r.hata ?? (r.degisti ? t('{ad} hesabına geçildi; önceki ilerlemen geri geldi.', {'ad': ad}) : t('{ad} hesaba bağlandı.', {'ad': ad}));
+        _mesaj = r.hata ?? (h.sonBirlesti ? t('Misafir ilerlemen {ad} hesabına eklendi.', {'ad': ad}) : r.degisti ? t('{ad} hesabına geçildi; önceki ilerlemen geri geldi.', {'ad': ad}) : t('{ad} hesaba bağlandı.', {'ad': ad}));
         _nick.text = h.nick;
         _avatar = h.avatar;
       });
@@ -134,15 +131,12 @@ class _ProfilEkraniState extends State<ProfilEkrani> {
   }
 
   Future<void> _epostaGiris() async {
-    if (h.misafir && ((h.profil?['oyun'] as int?) ?? 0) > 0) {
-      if (!await _onay(t('Hesap değişecek'), t('Bu cihazdaki misafir hesabın (Seviye {lv}) bağlı olmadığı için bırakılır. Devam edilsin mi?', {'lv': h.level}))) return;
-    }
     setState(() => _mesgul = true);
     final hata = await h.epostaGiris(_eposta.text.trim(), _sifre.text);
     if (mounted) {
       setState(() {
         _mesgul = false;
-        _mesaj = hata ?? t('Giriş yapıldı.');
+        _mesaj = hata ?? (h.sonBirlesti ? t('Giriş yapıldı; misafir ilerlemen hesabına eklendi.') : t('Giriş yapıldı.'));
         _nick.text = h.nick;
         _avatar = h.avatar;
       });

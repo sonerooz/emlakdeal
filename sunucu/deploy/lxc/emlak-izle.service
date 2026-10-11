@@ -1,0 +1,6 @@
+[Unit]
+Description=Emlak Deal izleme
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/emlak_izle.env
+ExecStart=/usr/bin/python3 /opt/monodeal/emlak_izle.py

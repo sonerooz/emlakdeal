@@ -10,16 +10,17 @@ const Map<String, String> _renkEn = {
   'Lacivert': 'Dark Blue',
   'Siyah': 'Black',
   'Turkuaz': 'Turquoise',
+  'Pembe': 'Pink',
 };
 
 const Map<String, String> _sabitEn = {
   'Tapu takası yapıyorum.': "I'm swapping properties.",
   'Senden 5M tahsil ediyorum.': "I'm collecting 5M from you.",
-  'Reddediyorum!': 'Just say no!',
+  'Reddediyorum!': 'I reject that!',
   'Reddini reddediyorum!': 'I reject your rejection!',
   'Ödeyecek hiçbir şeyim yok.': 'I have nothing to pay with.',
   'İki kart çekiyorum.': "I'm drawing two cards.",
-  'Bugün doğum günüm! Herkesten 2M istiyorum.': "It's my birthday! 2M from everyone, please.",
+  'Ev partisi! Herkesten 2M istiyorum.': 'Housewarming time! 2M from everyone, please.',
   'Üç tam set! Kazandım!': 'Three full sets! I win!',
   'Çift kira!': 'Double rent!',
   'Süren bitti, sıra bende!': "Time's up, my turn!",

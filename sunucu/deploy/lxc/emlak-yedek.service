@@ -1,0 +1,5 @@
+[Unit]
+Description=Emlak Deal DB yedegi
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/monodeal/emlak_yedek.py

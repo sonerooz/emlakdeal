@@ -15,6 +15,7 @@ extension PColorRenk on PColor {
         PColor.darkBlue: Color(0xFF1F3F9E),
         PColor.railroad: Color(0xFF2B2B2B),
         PColor.utility: Color(0xFF3FC1C9),
+        PColor.rose: Color(0xFFE8629A),
       }[this]!;
 }
 
@@ -117,7 +118,7 @@ final List<(RegExp, String, String)> _kaliplar = [
 
 /// Motorun/sunucunun ürettiği Türkçe oyun metnini (günlük satırı, banner etiketi, açıklama) kullanıcının diline çevirir.
 String oyunMetin(String tr) {
-  if (!Dil.o.en) return tr;
+  if (!Dil.o.en) return paraYaz(tr);
   for (final (re, anahtar, tur) in _kaliplar) {
     final m = re.firstMatch(tr);
     if (m == null) continue;

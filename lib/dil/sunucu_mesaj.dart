@@ -5,16 +5,18 @@ import '../dil.dart';
 ///
 /// Şablonlarda `{1}` yakalanan metni olduğu gibi, `{s1}` ise (kart/renk adı gibi) yine [sunucuMesaj]'dan geçirerek koyar.
 /// Kalıplarda `@` bir oyuncu adı (boşluksuz sözcük) yakalar.
-String sunucuMesaj(String tr) {
+String sunucuMesaj(String tr) => paraYaz(_sunucuMesaj(tr));
+
+String _sunucuMesaj(String tr) {
   if (!Dil.o.en) return tr;
-  final tam = t(tr);
+  final tam = tHam(tr);
   if (tam != tr) return tam;
   for (final k in _kaliplar) {
     final m = k.$1.firstMatch(tr);
     if (m == null) continue;
     return k.$2.replaceAllMapped(RegExp(r'\{(s?)(\d)\}'), (x) {
       final g = m.group(int.parse(x.group(2)!)) ?? '';
-      return x.group(1) == 's' ? sunucuMesaj(g) : g;
+      return x.group(1) == 's' ? _sunucuMesaj(g) : g;
     });
   }
   return tr;

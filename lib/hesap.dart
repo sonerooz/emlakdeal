@@ -125,9 +125,14 @@ class Hesap {
     }
   }
 
+  /// Son girişte misafir ilerlemesi mevcut hesaba eklendiyse true.
+  bool sonBirlesti = false;
+
   Future<String?> epostaGiris(String eposta, String sifre) async {
+    sonBirlesti = false;
     try {
-      final r = await _istek('/api/giris', govde: {'eposta': eposta, 'sifre': sifre}, yetki: false);
+      final r = await _istek('/api/giris', govde: {'eposta': eposta, 'sifre': sifre});
+      sonBirlesti = r['birlesti'] == true;
       token = r['token'] as String;
       await _p?.setString('token', token!);
       await _profilKaydet(Map<String, dynamic>.from(r['profil'] as Map));
@@ -143,6 +148,7 @@ class Hesap {
 
   /// Google/Facebook ile bağlan. Başka hesaba geçilirse degisti true. Hata metni ya da null.
   Future<({String? hata, bool degisti})> sosyalGiris(String saglayici) async {
+    sonBirlesti = false;
     try {
       String? tok;
       if (saglayici == 'google') {
@@ -163,6 +169,7 @@ class Hesap {
       }
       final r = await _istek('/api/sosyal', govde: {'saglayici': saglayici, 'token': tok});
       final degisti = r['degisti'] == true;
+      sonBirlesti = r['birlesti'] == true;
       if (degisti) {
         token = r['token'] as String;
         await _p?.setString('token', token!);
