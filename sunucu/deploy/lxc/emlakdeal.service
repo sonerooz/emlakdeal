@@ -1,0 +1,19 @@
+[Unit]
+Description=Emlak Deal oyun sunucusu
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=emlak
+Group=emlak
+WorkingDirectory=/opt/emlakdeal/src/sunucu
+Environment=HOME=/opt/emlakdeal
+Environment=PUB_CACHE=/opt/emlakdeal/.pub-cache
+ExecStart=/opt/dart-sdk/bin/dart run bin/sunucu.dart 8765
+Restart=always
+RestartSec=3
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes

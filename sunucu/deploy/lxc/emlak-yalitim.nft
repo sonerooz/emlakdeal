@@ -1,0 +1,40 @@
+#!/usr/sbin/nft -f
+# Emlak Deal oyun container'ı (LXC 102, veth102i0) ev ağından yalıtılır.
+# Yalnız bu arayüzü etkiler; ana makine ve diğer misafirler etkilenmez.
+table bridge emlak_yalitim
+delete table bridge emlak_yalitim
+
+table bridge emlak_yalitim {
+  set ozel4 {
+    type ipv4_addr; flags interval
+    elements = { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16 }
+  }
+
+  # Container'dan çıkan çerçeveler (köprü üzerinden başka cihaza giden)
+  chain ileri {
+    type filter hook forward priority -10; policy accept;
+    # IPv6 kapalı: aynı /64'teki ev cihazlarına IPv6 ile ulaşılmasın
+    iifname "veth102i0" ether type ip6 counter drop
+    oifname "veth102i0" ether type ip6 counter drop
+    # izleme yanıtı: LXC 101'e yalnız sağlık portundan dönüş
+    iifname "veth102i0" ip daddr 192.168.1.21 tcp sport 8765 accept
+    iifname "veth102i0" ip daddr @ozel4 counter drop
+    # ev ağından container'a: yalnız LXC 101 -> 8765
+    oifname "veth102i0" ip saddr 192.168.1.21 tcp dport 8765 accept
+    oifname "veth102i0" ip saddr @ozel4 counter drop
+  }
+
+  # Container'dan ana makinenin kendisine (Proxmox arayüzü, SSH) giden çerçeveler
+  chain giris {
+    type filter hook input priority -10; policy accept;
+    iifname "veth102i0" ether type ip6 counter drop
+    iifname "veth102i0" ip daddr @ozel4 counter drop
+  }
+
+  # Ana makineden container'a
+  chain cikis {
+    type filter hook output priority -10; policy accept;
+    oifname "veth102i0" ether type ip6 counter drop
+    oifname "veth102i0" ip saddr @ozel4 counter drop
+  }
+}

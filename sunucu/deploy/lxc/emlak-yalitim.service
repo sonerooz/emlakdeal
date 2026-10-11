@@ -1,0 +1,13 @@
+[Unit]
+Description=Emlak Deal container (LXC 102) ag yalitimi
+After=network-pre.target pve-guests.service
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/emlak-yalitim.nft
+ExecStop=/usr/sbin/nft delete table bridge emlak_yalitim
+
+[Install]
+WantedBy=multi-user.target
