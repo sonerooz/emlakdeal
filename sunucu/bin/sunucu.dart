@@ -86,7 +86,9 @@ class Oda {
   DateTime sozBitis = DateTime.now();
 
   bool get basladi => game != null;
-  static const kopmaSuresi = Duration(seconds: 30);
+  static const kopmaSuresi = Duration(seconds: 60);
+  /// Odada hiç bağlı insan kalmazsa oda bu süre sonra kapanır (dönen oyuncu devam edebilsin).
+  Timer? bosKapanma;
 
   Koltuk? koltukOf(Player p) => koltuklar.where((k) => k.player == p).firstOrNull;
 
@@ -289,6 +291,7 @@ class Oda {
     }
     return {
       't': 'basladi',
+      'oda': kod,
       'sen': sen,
       'bahis': bahisliOyun ? bahis : 0,
       'havuz': bahisliOyun ? bahis * bahisKoltuklari.length : 0,
@@ -624,8 +627,19 @@ void mesaj(Baglanti b, Map<String, dynamic> m) {
         cevrimici[pr.id!] = b;
       }
       // aynı adla kopan koltuğa geri dön
-      final eski = oda.koltuklar.where((k) => k.bag == null && k.kullaniciId != null && k.kullaniciId == pr.id).firstOrNull;
+      final eski = oda.koltuklar.where((k) => k.kullaniciId != null && k.kullaniciId == pr.id && (k.bag == null || oda.basladi)).firstOrNull;
       if (eski != null) {
+        final yarim = eski.bag;
+        if (yarim != null && yarim != b) {
+          // telefon arka plana gidince bağlantı yarım kalabilir: eskisini bırakıp yenisine geç
+          yarim.oda = null;
+          yarim.koltuk = null;
+          try {
+            yarim.ws.close();
+          } catch (_) {}
+        }
+        oda.bosKapanma?.cancel();
+        oda.bosKapanma = null;
         eski.bag = b;
         eski.kopmaSayaci?.cancel();
         eski.kopmaSayaci = null;
@@ -809,14 +823,17 @@ void _odadanCik(Baglanti b) {
     if (oda.sahip == k) oda.sahip = oda.koltuklar.first;
     oda.lobiYayinla();
   } else {
-    // oyun sürüyor: 30 sn geri dönüş süresi; dönmezse yerine bot oynar (dönerse devralır)
+    // oyun sürüyor: 60 sn geri dönüş süresi; dönmezse yerine bot oynar (dönerse devralır)
     if (oda.baglar.isEmpty) {
-      oda.bahisIptal();
-      odalar.remove(oda.kod);
-      log('oda ${oda.kod} boşaldı, kapandı');
-      return;
+      oda.bosKapanma?.cancel();
+      oda.bosKapanma = Timer(const Duration(seconds: 120), () {
+        if (oda.baglar.isNotEmpty || !odalar.containsKey(oda.kod)) return;
+        oda.bahisIptal();
+        odalar.remove(oda.kod);
+        log('oda ${oda.kod} boşaldı, kapandı');
+      });
     }
-    oda.herkese({'t': 'bilgi', 'm': '${k.ad} bağlantısı koptu, 30 sn bekleniyor…'});
+    oda.herkese({'t': 'bilgi', 'm': '${k.ad} bağlantısı koptu, 60 sn bekleniyor…'});
     k.kopmaSayaci?.cancel();
     k.kopmaSayaci = Timer(Oda.kopmaSuresi, () {
       if (k.bag != null || !odalar.containsKey(oda.kod)) return;

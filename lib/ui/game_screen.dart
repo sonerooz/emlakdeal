@@ -23,9 +23,15 @@ import 'guvenlik.dart';
 import 'table_3d.dart';
 import 'sayac.dart';
 import 'konfeti.dart';
+import 'ogretici_mac.dart';
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, this.botSayisi = 1, this.net, this.benIdx = 0, this.adlar = const [], this.botlar = const [], this.avatarlar = const [], this.leveller = const [], this.sesler = const [], this.kayit, this.bahis = 0, this.havuz = 0});
+  const GameScreen({super.key, this.botSayisi = 1, this.net, this.benIdx = 0, this.adlar = const [], this.botlar = const [], this.avatarlar = const [], this.leveller = const [], this.sesler = const [], this.kayit, this.bahis = 0, this.havuz = 0, this.ogretici = false, this.odaKodu, this.sifre});
+  /// Online: bağlantı kopunca aynı odaya geri katılmak için.
+  final String? odaKodu;
+  final String? sifre;
+  /// Rehberli ilk maç: senaryolu deste, anlatıcı ses+yazı, yalnız gösterilen karta dokunulabilir.
+  final bool ogretici;
   /// Bahisli online oda: kişi başı bahis ve toplam havuz (altın).
   final int bahis;
   final int havuz;
@@ -60,6 +66,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   late final Player ben;
   late final List<Player> botlar;
   late final BotDecider _botAi = BotDecider(zorluk: Ayarlar.o.botZorluk);
+  OgrKontrol? _ogr;
+  final Map<int, GlobalKey> _kKart = {};
   bool _botOynuyor = false;
   bool _bittiGosterildi = false;
   bool _hazir = false;
@@ -93,7 +101,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   bool _sesli = Ayarlar.o.sesli;
 
   bool get _online => widget.net != null;
+  late Istemci? _netM = widget.net;
+  bool _baglaniyor = false;
+  final Map<Player, int> _bekleyenCek = {};
   StreamSubscription? _netAbone;
+  StreamSubscription? _koptuAbone;
   Future<void> _olayKuyrugu = Future.value();
   bool _turBitiyor = false;
   DateTime? _sureBitis;
@@ -107,7 +119,57 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    if (state == AppLifecycleState.resumed) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      if (_online && game.kazanan == null && !(_netM?.bagli ?? false)) _yenidenBaglan();
+    }
+  }
+
+  /// Uygulama arka plana gidince soket kopar; geri dönünce aynı odaya otomatik katılır (sunucu koltuğu geri verir).
+  Future<void> _yenidenBaglan() async {
+    final kod = widget.odaKodu;
+    if (_baglaniyor || kod == null || !mounted) return;
+    _baglaniyor = true;
+    _mesaj(t('Yeniden bağlanılıyor…'));
+    try {
+      for (var deneme = 0; deneme < 12 && mounted && game.kazanan == null; deneme++) {
+        Istemci? yeni;
+        try {
+          yeni = Istemci(Ayarlar.o.sunucu);
+          try {
+            await yeni.baglan();
+          } catch (_) {
+            final yerel = Ayarlar.sunucuYerel;
+            if (yerel == null) rethrow;
+            yeni = Istemci(yerel);
+            await yeni.baglan();
+          }
+        } catch (_) {
+          await Future.delayed(const Duration(seconds: 2));
+          continue;
+        }
+        if (!mounted) {
+          yeni.kapat();
+          return;
+        }
+        _netAbone?.cancel();
+        _koptuAbone?.cancel();
+        _netM?.kapat();
+        _netM = yeni;
+        _netAbone = yeni.mesajlar.listen(_netMesaj);
+        _koptuAbone = yeni.koptu.listen((_) => _koptu());
+        yeni.gonder({'t': 'katil', 'oda': kod, 'token': Hesap.o.token, 'ad': Hesap.o.nick, if ((widget.sifre ?? '').isNotEmpty) 'sifre': widget.sifre});
+        return;
+      }
+      if (mounted && game.kazanan == null) _mesaj(t('Sunucu bağlantısı koptu.'));
+    } finally {
+      _baglaniyor = false;
+    }
+  }
+
+  void _koptu() {
+    if (!mounted || game.kazanan != null) return;
+    _yenidenBaglan();
   }
 
   @override
@@ -127,6 +189,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
         _profiller[oy[i]] = (i < widget.avatarlar.length ? widget.avatarlar[i] : (oy[i].isBot ? '🤖' : '🙂'), i < widget.leveller.length ? widget.leveller[i] : 1);
         _sesNo[oy[i]] = i < widget.sesler.length ? widget.sesler[i] : i % sesAdlari.length;
       }
+    } else if (widget.ogretici) {
+      _ogr = OgrKontrol();
+      ben = Player(Hesap.o.nick, isBot: false, decider: OgrDecider(_insan, (s) => s.contains(PColor.orange) ? PColor.orange : null, saldiriReddi: _ogrSaldiriReddi));
+      botlar = [Player('Emlakçı Ali', isBot: true, decider: _botAi)];
+      game = Game(players: [ben, ...botlar]);
+      _profiller[botlar[0]] = (avatarlar[0], 3);
+      _botSesAta();
     } else if (widget.kayit != null) {
       final oy = widget.kayit!['oyuncular'] as List;
       ben = Player((oy[0] as Map)['ad'] as String, isBot: false, decider: _insan);
@@ -164,17 +233,26 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     Muzik.o.guncelle();
     Izleme.o.olay('oyun_basladi', {'mod': _online ? 'online' : 'bot', 'oyuncu': widget.adlar.isNotEmpty ? widget.adlar.length : widget.botSayisi + 1, 'devam': widget.kayit != null});
     if (_online) {
-      _netAbone = widget.net!.mesajlar.listen(_netMesaj);
+      _netAbone = _netM!.mesajlar.listen(_netMesaj);
       Hesap.o.engelleriYukle().catchError((_) => <Map<String, dynamic>>[]);
-      widget.net!.koptu.listen((_) {
-        if (mounted) _mesaj(t('Sunucu bağlantısı koptu.'));
-      });
+      _koptuAbone = _netM!.koptu.listen((_) => _koptu());
       return;
     }
     // tek kişilik oyun: her değişiklikte kaydet (uygulama kapanınca devam edilebilir)
-    game.addListener(_kaydet);
-    game.addListener(_turTakip);
+    if (!widget.ogretici) {
+      game.addListener(_kaydet);
+      game.addListener(_turTakip);
+    } else {
+      _ogr!.addListener(_ogrGuncelle);
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (widget.ogretici) {
+        _ogrKur();
+        if (!mounted) return;
+        setState(() => _hazir = true);
+        unawaited(_ogrSenaryo());
+        return;
+      }
       if (widget.kayit != null) {
         kayitYukle(game, widget.kayit!);
       } else {
@@ -266,6 +344,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
         }
       case 'olay':
         final e = olayOku(game, Map<String, dynamic>.from(m['o'] as Map));
+        if (e.tip == EvTip.cek && e.kim != null) _bekleyenCek[e.kim!] = (_bekleyenCek[e.kim!] ?? 0) + 1;
         _olayKuyrugu = _olayKuyrugu.then((_) => _animasyon(e));
       case 'soz':
         final sk = game.players[m['kim'] as int];
@@ -323,13 +402,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     } catch (_) {
       deger = null;
     }
-    widget.net?.gonder({'t': 'karar', 'id': id, 'deger': deger});
+    _netM?.gonder({'t': 'karar', 'id': id, 'deger': deger});
   }
 
   /// Hamle: online ise sunucuya gönderir (sonuç durum mesajıyla gelir), değilse yerel motoru çağırır.
   Future<bool> _yap(String tip, Map<String, dynamic> veri, Future<bool> Function() yerel) async {
     if (_online) {
-      widget.net!.gonder({'t': 'hamle', 'tip': tip, ...veri});
+      _netM?.gonder({'t': 'hamle', 'tip': tip, ...veri});
       return true;
     }
     return yerel();
@@ -339,6 +418,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _ogr?.dispose();
     _klip.dispose();
     _sohbetKlip.dispose();
     _efekt.dispose();
@@ -346,7 +426,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     _sohbetYazi.dispose();
     _dinleyici.dispose();
     _netAbone?.cancel();
-    widget.net?.kapat();
+    _koptuAbone?.cancel();
+    _netM?.kapat();
     game.removeListener(_kaydet);
     game.removeListener(_turTakip);
     _sayacTik?.cancel();
@@ -400,7 +481,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
 
   /// Konuşmayı başlatır ve hemen döner (hamle beklemez); sözler sırayla kuyruklanır.
   Future<void> _konus(Player p, String soz) async {
-    if (!mounted) return;
+    if (!mounted || _ogr != null) return; // rehberli maçta yalnız anlatıcı konuşur
     if (p == ben) {
       if (soz.endsWith('seti artık benim.')) Ayarlar.o.sayacHaciz++;
       if (soz == 'Reddediyorum!') Ayarlar.o.sayacReddet++;
@@ -520,7 +601,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   void _sohbetGonder(String soz) {
     soz = _sansur(soz);
     if (_online) {
-      widget.net!.gonder({'t': 'sohbet', 'soz': soz});
+      _netM?.gonder({'t': 'sohbet', 'soz': soz});
       return; // sunucudan herkese (bize de) döner
     }
     _sohbetGoster(ben, soz);
@@ -658,6 +739,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
         } else {
           await _masaUcur(e.card, deste, elM(kim!), arka: true, ms: 480, w: 40, scaleTo: 0.5);
         }
+        if (_online && (_bekleyenCek[kim] ?? 0) > 0) {
+          if (mounted) setState(() => _bekleyenCek[kim] = _bekleyenCek[kim]! - 1);
+        }
         await Future.delayed(const Duration(milliseconds: 120));
       case EvTip.mulk:
         await _buyukGoster(e.card, adim, kim == ben ? 600 : 1100);
@@ -703,6 +787,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   /// Sıradaki(ler) botsa sırayla oynatır; sıra insana gelince durur.
   Future<void> _botKontrol() async {
     if (_botOynuyor || _online) return;
+    if (_ogr != null) return _ogrBotTuru();
     _botOynuyor = true;
     if (mounted) setState(() {});
     try {
@@ -720,6 +805,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   void _bitisKontrol() {
     if (game.kazanan == null || _bittiGosterildi) return;
     _bittiGosterildi = true;
+    if (_ogr != null) {
+      _ogrBitis();
+      return;
+    }
     final k = game.kazanan!;
     final a = Ayarlar.o;
     a.oynanan++;
@@ -817,7 +906,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
                 }
                 Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => GameScreen(botSayisi: widget.botSayisi)));
               },
-              child: Text(_online ? t('Lobiye dön') : t('Revanş')),
+              child: Text(_online ? t('Lobiye dön') : t('Rövanş')),
             ),
           ],
         ),
@@ -922,6 +1011,231 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   final Map<int, DateTime> _sonTik = {};
 
   Future<void> _kartTikla(GameCard c) async {
+    final o = _ogr;
+    if (o == null) return _kartTiklaAsil(c);
+    if (!o.kartIzinli(c) || !_sirada) return;
+    if (c.action == ActionType.forcedDeal) {
+      await _ogrTakas(c);
+    } else if (c.action == ActionType.dealBreaker) {
+      await _ogrHaciz(c);
+    } else {
+      await _kartTiklaAsil(c);
+    }
+    if (!ben.hand.contains(c)) o.kartOynandi(c);
+  }
+
+  // ----------------------------------------------------------- rehberli ilk maç
+  void _ogrGuncelle() {
+    if (!mounted) return;
+    setState(() {});
+    final id = _ogr!.hedefKartId;
+    if (id == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _kKart[id]?.currentContext;
+      if (ctx != null && ctx.mounted) Scrollable.ensureVisible(ctx, alignment: 0.5, duration: const Duration(milliseconds: 300));
+    });
+  }
+
+  Rect? _ogrRect(int id) {
+    final k = _kKart[id]?.currentContext?.findRenderObject();
+    final s = _kStack.currentContext?.findRenderObject();
+    if (k is! RenderBox || s is! RenderBox || !k.attached || !k.hasSize || !s.attached) return null;
+    return s.globalToLocal(k.localToGlobal(Offset.zero)) & k.size;
+  }
+
+  /// Senaryo: kazanmak için gereken setler hazır; deste sırası ve eller sabit.
+  void _ogrKur() {
+    final d = game.deck;
+    GameCard al(bool Function(GameCard) f) {
+      final c = d.firstWhere(f);
+      d.remove(c);
+      return c;
+    }
+
+    GameCard tapu(PColor r, String ad) => al((c) => c.kind == CardKind.property && c.color == r && c.sokak == ad);
+    GameCard para(int v) => al((c) => c.isMoney && c.value == v);
+    GameCard eylem(ActionType a) => al((c) => c.action == a);
+    final bot = botlar.first;
+    // benim masam
+    ben.mulkEkle(tapu(PColor.lightBlue, 'Çukurova'), PColor.lightBlue);
+    ben.mulkEkle(tapu(PColor.lightBlue, 'Yüreğir'), PColor.lightBlue);
+    ben.mulkEkle(tapu(PColor.pink, 'Meram'), PColor.pink);
+    ben.mulkEkle(tapu(PColor.pink, 'Karatay'), PColor.pink);
+    ben.mulkEkle(tapu(PColor.orange, 'Muratpaşa'), PColor.orange);
+    ben.mulkEkle(tapu(PColor.utility, 'Doğalgaz İdaresi'), PColor.utility);
+    // rakip masası
+    for (final s in ['Nilüfer', 'Osmangazi', 'Gemlik']) {
+      bot.mulkEkle(tapu(PColor.red, s), PColor.red);
+    }
+    bot.mulkEkle(tapu(PColor.pink, 'Selçuklu'), PColor.pink);
+    bot.mulkEkle(tapu(PColor.green, 'Çankaya'), PColor.green);
+    // eller
+    ben.hand.addAll([
+      tapu(PColor.lightBlue, 'Seyhan'),
+      eylem(ActionType.doubleRent),
+      al((c) => c.isWild && c.colors.length == 2 && c.colors.contains(PColor.pink) && c.colors.contains(PColor.orange)),
+      eylem(ActionType.justSayNo),
+    ]);
+    bot.hand.addAll([eylem(ActionType.tahsilat), para(5)]);
+    // çekme sırası (sondan çekilir): ben 2, rakip 2, ben 2 (Takas, Haciz)
+    d.addAll([eylem(ActionType.dealBreaker), eylem(ActionType.forcedDeal), para(2), para(1), para(2), para(1)]);
+    game.current = 0;
+  }
+
+  Future<void> _ogrSiraBekle() async {
+    for (var i = 0; i < 160 && mounted; i++) {
+      if (game.aktif == ben && _sirada && game.playsLeft == 3) return;
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+  }
+
+  Future<void> _ogrSenaryo() async {
+    final o = _ogr!;
+    Ayarlar.o.ogreticiGoruldu = true;
+    Ayarlar.o.kaydet();
+    await Future.delayed(const Duration(milliseconds: 500));
+    await _ogrDilSec();
+    if (!mounted) return;
+    await game.turBaslat();
+    if (!mounted) return;
+    GameCard el(bool Function(GameCard) f) => ben.hand.firstWhere(f);
+    await o.devam(0);
+    if (o.bitti || !mounted) return;
+    await o.kartBekle(1, el((c) => c.sokak == 'Seyhan'));
+    await o.anlat(2);
+    await o.kartBekle(3, el((c) => c.action == ActionType.doubleRent));
+    await o.kartBekle(4, el((c) => c.isWild));
+    if (o.bitti || !mounted) return;
+    await _ogrSiraBekle();
+    if (o.bitti || !mounted) return;
+    await o.kartBekle(6, el((c) => c.action == ActionType.forcedDeal));
+    await o.anlat(7);
+    await o.kartBekle(8, el((c) => c.action == ActionType.dealBreaker));
+  }
+
+  /// Rakip İcra Takibi oynar: Reddet'i öğreten zorunlu adım.
+  Future<bool> _ogrSaldiriReddi(String aciklama) async {
+    final o = _ogr;
+    if (o == null || !mounted) return false;
+    unawaited(o.anlat(10));
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black38,
+      builder: (ctx) => AlertDialog(
+        title: Text(t('⚔️ Rakip saldırıyor!')),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(t('{ad} sana İcra Takibi oynadı: senden 5M istiyor.', {'ad': botlar.first.name})),
+          const SizedBox(height: 12),
+          Text(t('Elindeki Reddet kartı bu saldırıyı iptal eder.'), style: const TextStyle(fontWeight: FontWeight.w700)),
+        ]),
+        actions: [FilledButton.icon(onPressed: () => Navigator.pop(ctx), icon: const Text('🛡️'), label: Text(t('Reddet\'i oyna')))],
+      ),
+    );
+    await o.anlat(11);
+    return true;
+  }
+
+  Future<void> _ogrBotTuru() async {
+    _botOynuyor = true;
+    if (mounted) setState(() {});
+    try {
+      if (game.aktif.isBot && game.kazanan == null) {
+        final bot = game.aktif;
+        final c = bot.hand.firstWhere((x) => x.action == ActionType.tahsilat);
+        await Future.delayed(const Duration(milliseconds: 900));
+        await game.tahsilat(bot, c, ben);
+        await Future.delayed(const Duration(milliseconds: 500));
+        await game.turBitir();
+      }
+    } finally {
+      _botOynuyor = false;
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// Dil daha önce seçilmediyse rehberli maçın başında sorar (anlatıcı sesi ve metni seçilen dilde olur).
+  Future<void> _ogrDilSec() async {
+    if (Ayarlar.o.dil == 'tr' || Ayarlar.o.dil == 'en') return;
+    final oneri = Dil.o.kod;
+    final sec = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Dil / Language'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48), backgroundColor: oneri == 'tr' ? null : Colors.grey),
+            onPressed: () => Navigator.pop(ctx, 'tr'),
+            child: const Text('🇹🇷  Türkçe'),
+          ),
+          const SizedBox(height: 10),
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48), backgroundColor: oneri == 'en' ? null : Colors.grey),
+            onPressed: () => Navigator.pop(ctx, 'en'),
+            child: const Text('🇬🇧  English'),
+          ),
+        ]),
+      ),
+    );
+    if (sec == null) return;
+    Ayarlar.o.dil = sec;
+    await Ayarlar.o.kaydet();
+    await Dil.o.sec(sec);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _ogrTakas(GameCard c) async {
+    final benimki = ben.propsOf(PColor.utility).first;
+    final onunki = botlar.first.propsOf(PColor.pink).first;
+    await _yap('forcedDeal', {'kart': c.id, 'benim': benimki.id, 'onun': onunki.id}, () => game.forcedDeal(ben, c, benimki, onunki));
+    await _sonra();
+  }
+
+  Future<void> _ogrHaciz(GameCard c) async {
+    final r = botlar.first;
+    await _yap('dealBreaker', {'kart': c.id, 'hedef': game.players.indexOf(r), 'set': PColor.red.index}, () => game.dealBreaker(ben, c, r, PColor.red));
+    await _sonra();
+  }
+
+  Future<void> _ogrBitis() async {
+    final o = _ogr!;
+    await Future.delayed(const Duration(milliseconds: 900));
+    if (!mounted) return;
+    konfetiPatlat(context);
+    AltinSes.zafer();
+    await o.anlat(9);
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(t('🏆 İlk maçını kazandın!')),
+        content: Text(t('Artık kuralları biliyorsun. Gerçek rakiplerle oynamaya hazırsın.')),
+        actions: [FilledButton(onPressed: () => Navigator.pop(ctx), child: Text(t('Oyuna başla')))],
+      ),
+    );
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _ogrAtla() async {
+    final evet = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(t('Öğretici atlansın mı?')),
+        content: Text(t('Rehberli maçı menüden istediğin zaman tekrar oynayabilirsin.')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t('Devam et'))),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t('Atla'))),
+        ],
+      ),
+    );
+    if (evet != true) return;
+    await _ogr!.durdur();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _kartTiklaAsil(GameCard c) async {
     final simdi = DateTime.now();
     final onceki = _sonTik[c.id];
     if (onceki != null && simdi.difference(onceki) < const Duration(milliseconds: 1500)) return;
@@ -1164,7 +1478,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   Future<bool> _bina(GameCard c) async {
     final setler = _binaSetleri(c);
     if (setler.isEmpty) {
-      _mesaj(c.action == ActionType.house ? t('Evsiz tam setin yok.') : t('Evli (rezidanssız) tam setin yok.'));
+      _mesaj(c.action == ActionType.house ? t('Evi olmayan tam setin yok.') : t('Evi olup rezidansı olmayan tam setin yok.'));
       return false;
     }
     final s = await _renkSec(t('🏗️ Hangi sete?'), setler);
@@ -1176,7 +1490,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     if (!_hazir || game.aktif != ben || game.kazanan != null || _botOynuyor) return;
     setState(() => _acikDeste = null);
     if (_online) {
-      widget.net!.gonder({'t': 'hamle', 'tip': 'turBitir'});
+      _netM?.gonder({'t': 'hamle', 'tip': 'turBitir'});
       return;
     }
     await game.turBitir(sureDoldu: sureDoldu);
@@ -1267,12 +1581,14 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
                     tableKey: _kMasa,
                     profiller: _profiller,
                     ucanlar: _masaUcanlar,
+                    bekleyenCek: _bekleyenCek,
                     ustBilgi: _durumSeridi(durum),
                     rozetMenu: _online && !Hesap.o.misafir ? _rozetMenu : null,
                   ),
                 ),
                 _el(),
               ]),
+              if (_ogr != null) Positioned.fill(child: OgrKatman(kontrol: _ogr!, hedefRect: _ogrRect, atla: _ogrAtla)),
               for (final u in _ucanlar)
                 AnimatedBuilder(
                   animation: u.ctl,
@@ -1389,7 +1705,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
         IconButton(
           tooltip: t('Turu bitir'),
           color: _sirada ? Colors.amber : Colors.white24,
-          onPressed: _sirada ? _turBitir : null,
+          onPressed: _sirada && _ogr == null ? _turBitir : null,
           icon: const Icon(Icons.skip_next, size: 28),
         ),
       ]),
@@ -1456,7 +1772,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
               Padding(
                 padding: const EdgeInsets.only(right: 6),
                 // Sıra sende değilse ya da kartın asıl işlevi şu an mümkün değilse soluk
-                child: CardView(c, w: 74, dim: !_sirada || !_oynanabilir(c), onTap: () => _kartTikla(c)),
+                child: KeyedSubtree(
+                  key: _kKart.putIfAbsent(c.id, () => GlobalKey()),
+                  child: CardView(c, w: 74, dim: _ogr != null ? !(_ogr!.kartIzinli(c) && _sirada) : (!_sirada || !_oynanabilir(c)), onTap: () => _kartTikla(c)),
+                ),
               ),
           ]),
         ),

@@ -287,7 +287,7 @@ class _HesapSilOnayState extends State<_HesapSilOnay> {
     super.dispose();
   }
 
-  bool get _hazir => _anladim && _sil.text.trim() == 'SIL' && (!_parolaGerek || _parola.text.isNotEmpty) && !_mesgul;
+  bool get _hazir => _anladim && _sil.text.trim().replaceAll('İ', 'I').toUpperCase() == 'SIL' && (!_parolaGerek || _parola.text.isNotEmpty) && !_mesgul;
 
   Future<void> _gonder() async {
     setState(() {
@@ -328,7 +328,7 @@ class _HesapSilOnayState extends State<_HesapSilOnay> {
               title: Text(t('Hesabımın ve verilerimin kalıcı olarak silineceğini anlıyorum.'), style: const TextStyle(color: Colors.white, fontSize: 13)),
             ),
             const SizedBox(height: 6),
-            TextField(controller: _sil, enabled: !_mesgul, autocorrect: false, textCapitalization: TextCapitalization.characters, onChanged: (_) => setState(() {}), style: const TextStyle(color: Colors.white), decoration: _dec(t('Onaylamak için SIL yaz'))),
+            TextField(controller: _sil, enabled: !_mesgul, autocorrect: false, textCapitalization: TextCapitalization.characters, onChanged: (_) => setState(() {}), style: const TextStyle(color: Colors.white), decoration: _dec(t('Onaylamak için SİL yaz'))),
             if (_parolaGerek) ...[
               const SizedBox(height: 10),
               TextField(controller: _parola, enabled: !_mesgul, obscureText: true, onChanged: (_) => setState(() {}), style: const TextStyle(color: Colors.white), decoration: _dec(t('Parolan'))),

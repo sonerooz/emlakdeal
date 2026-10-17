@@ -34,7 +34,7 @@ const Map<String, String> enGuvenlik = {
   'Devam': 'Continue',
   'Son onay': 'Final confirmation',
   'Hesabımın ve verilerimin kalıcı olarak silineceğini anlıyorum.': 'I understand my account and data will be permanently deleted.',
-  'Onaylamak için SIL yaz': 'Type SIL to confirm',
+  'Onaylamak için SİL yaz': 'Type SIL to confirm',
   'Parolan': 'Your password',
   'Hesabı kalıcı sil': 'Delete permanently',
   'Hesabın silindi. Misafir olarak devam edebilirsin.': 'Your account was deleted. You can continue as a guest.',

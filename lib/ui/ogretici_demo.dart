@@ -177,7 +177,7 @@ class _DemoSetState extends _DS<DemoSet> {
       masa[r]!.add(c);
     });
     if (el.isEmpty) {
-      bitir(t('Harika! İki set de tamam. Oyunu, FARKLI renkte 3 tam set toplayan kazanır.'));
+      bitir(t('Harika! İki set de tamam. Oyunu FARKLI renkte 3 tam set toplayan kazanır.'));
     } else if (masa[r]!.length >= r.setBoyu) {
       uyar(t('{renk} seti tamamlandı! Set boyu (2, 3 ya da 4) kartın üstünde yazar.', {'renk': r.adT}), hata: false);
     }

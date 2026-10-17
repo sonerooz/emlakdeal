@@ -54,8 +54,8 @@ const Map<String, String> enVeri = {
   'Her oyuncudan 2M al.': 'Take 2M from every player.',
   '2 kart çek.': 'Draw 2 cards.',
   'Tam bir sete koy: kira +3M.': 'Add to a complete set: rent +3M.',
-  'Evli tam sete koy: kira +4M.': 'Add to a complete set with a house: rent +4M.',
-  'Bir kira kartıyla oyna: kira 2 katı.': 'Play with a rent card: rent doubled.',
+  'Evi olan tam sete koy: kira +4M.': 'Add to a complete set with a house: rent +4M.',
+  'Kira kartıyla birlikte oyna: kira 2 katı olur.': 'Play with a rent card: rent doubled.',
   // --- ses tanımları
   'kararlı': 'steady',
   'neşeli': 'cheerful',

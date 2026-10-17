@@ -36,6 +36,7 @@ class Table3D extends StatefulWidget {
     this.ucanlar = const [],
     this.ustBilgi,
     this.rozetMenu,
+    this.bekleyenCek = const {},
   });
   final Game game;
   final Player ben;
@@ -54,6 +55,8 @@ class Table3D extends StatefulWidget {
   final Widget? ustBilgi;
   /// Verilirse insan rakiplerin rozetinde şikayet/engel menüsü açılır (avatara dokun ya da uzun bas).
   final void Function(Player p)? rozetMenu;
+  /// Online: sunucu durumu animasyondan önce gelir; henüz oynatılmamış çekişler (oyuncu → adet). Sayılar buna göre geriden gelir.
+  final Map<Player, int> bekleyenCek;
 
   @override
   State<Table3D> createState() => Table3DState();
@@ -148,7 +151,7 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
             final dx = d.focalPoint.dx - _p0.dx, dy = d.focalPoint.dy - _p0.dy;
             setState(() {
               zoom = (_z0 * d.scale).clamp(0.3, 2.6);
-              yaw = _yaw0 + dx * 0.008;
+              yaw = _yaw0 - dx * 0.008;
               tilt = (_tilt0 - dy * 0.005).clamp(_egimMin, _egimMax);
             });
           },
@@ -299,7 +302,7 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
         Column(key: widget.deckKey, mainAxisSize: MainAxisSize.min, children: [
           Builder(builder: (_) {
             // 5 kalınlık durumu: >80 kart 5, >60 4, >40 3, >20 2, 1-20 1, boşsa çerçeve
-            final n = g.deck.length;
+            final n = g.deck.length + widget.bekleyenCek.values.fold(0, (a, b) => a + b);
             final durum = n == 0 ? 0 : n > 80 ? 5 : n > 60 ? 4 : n > 40 ? 3 : n > 20 ? 2 : 1;
             final kat = durum * 3; // her durum 3 kart kalınlığı (her kat 1.3 px)
             return SizedBox(
@@ -338,7 +341,7 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
               ]),
             );
           }),
-          Text('${g.deck.length}', style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w700)),
+          Text('${g.deck.length + widget.bekleyenCek.values.fold(0, (a, b) => a + b)}', style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w700)),
         ]),
         const SizedBox(width: 26),
         SizedBox(
@@ -423,10 +426,10 @@ class Table3DState extends State<Table3D> with SingleTickerProviderStateMixin {
                     if (!ben) ...[
                       const SizedBox(width: 8),
                       Row(key: widget.handKeys[p], mainAxisSize: MainAxisSize.min, children: [
-                        for (var i = 0; i < p.hand.length.clamp(0, 7); i++)
+                        for (var i = 0; i < (p.hand.length - (widget.bekleyenCek[p] ?? 0)).clamp(0, 7); i++)
                           const Padding(padding: EdgeInsets.only(left: 1.5), child: CardBack(w: 12)),
                         const SizedBox(width: 4),
-                        Text('${p.hand.length}', style: TextStyle(color: aktif ? Colors.black87 : Colors.white70, fontSize: 11)),
+                        Text('${p.hand.length - (widget.bekleyenCek[p] ?? 0)}', style: TextStyle(color: aktif ? Colors.black87 : Colors.white70, fontSize: 11)),
                       ]),
                     ],
                   ]),

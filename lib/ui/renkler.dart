@@ -6,7 +6,7 @@ import '../dil.dart';
 extension PColorRenk on PColor {
   Color get renk => const {
         PColor.brown: Color(0xFF7B4A2E),
-        PColor.lightBlue: Color(0xFF7FC8F8),
+        PColor.lightBlue: Color(0xFF8CCBFF),
         PColor.pink: Color(0xFFB03A9E),
         PColor.orange: Color(0xFFF08A24),
         PColor.red: Color(0xFFD9342B),
@@ -14,7 +14,7 @@ extension PColorRenk on PColor {
         PColor.green: Color(0xFF1E9E4A),
         PColor.darkBlue: Color(0xFF1F3F9E),
         PColor.railroad: Color(0xFF2B2B2B),
-        PColor.utility: Color(0xFF3FC1C9),
+        PColor.utility: Color(0xFF0FA68F),
         PColor.rose: Color(0xFFE8629A),
       }[this]!;
 }

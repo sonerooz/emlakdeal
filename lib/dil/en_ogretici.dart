@@ -2,7 +2,7 @@
 const Map<String, String> enOgretici = {
   'Her tur 2 kart çek (elin boşsa 5). En fazla 3 hamle yaparsın; 3. hamlede tur kendiliğinden biter. Tapu ya da para kartına bir kez dokun: tapu sete, para bankaya gider. Kira ve ev kartlarına dokununca oyun en uygun yeri kendisi seçer; oynayacak yer yoksa kart para olarak bankaya girer. Tur sonunda elinde en fazla 7 kart kalabilir.':
       'Draw 2 cards each turn (5 if your hand is empty). You make up to 3 moves; the turn ends by itself after the 3rd. Tap a property or money card once: properties go to a set, money goes to the bank. When you tap rent and house cards the game picks the best target itself; if there is nowhere to play the card, it goes to the bank as money. You may keep at most 7 cards at the end of your turn.',
-  'Tapu Devri: tam olmayan setten bir tapu al. Takas Pazarlığı: tapu takas et (tam setler hariç). Haciz: rakibin TAM setini ev/rezidansıyla birlikte al. İcra Takibi: seçtiğin birinden 5M. Her biri 1 hamle harcar. Şimdi hepsini tek tek deneyelim.':
+  'Tapu Devri: tamamlanmamış setten bir tapu al. Takas Pazarlığı: tapu takas et (tam setler hariç). Haciz: rakibin TAM setini ev/rezidansıyla birlikte al. İcra Takibi: seçtiğin birinden 5M. Her biri 1 hamle harcar. Şimdi hepsini tek tek deneyelim.':
       'Deed Transfer: take a property from an incomplete set. Swap Meet: swap properties (complete sets excluded). Seizure: take a rival COMPLETE set together with its houses/hotels. Pay Up: 5M from anyone you choose. Each uses 1 move. Now let us try them one by one.',
   'Ev (+3M) ve Rezidans (+4M) sadece TAM setlere konur. Her sete bir Ev konur; Rezidans için önce Ev gerekir. Ulaşım ve Altyapı setlerine konmaz. Set bozulursa ev ve rezidans para olarak bankana döner.':
       'Houses (+3M) and Hotels (+4M) can only go on COMPLETE sets. One House per set; a Hotel needs a House first. Not allowed on Railroad and Utility sets. If a set breaks, its houses and hotels return to your bank as cash.',
@@ -19,7 +19,7 @@ const Map<String, String> enOgretici = {
   'Tapu setleri': 'Property sets',
   'Tapu kartlarına dokunarak masana koy. Aynı renkteki tapular bir sette toplanır; sette kaç tapu gerektiği başlıkta yazar (ör. 0/2). Tüm kartları koy.':
       'Tap the property cards to place them on your table. Properties of the same color form a set; the title shows how many are needed (e.g. 0/2). Place all the cards.',
-  'Harika! İki set de tamam. Oyunu, FARKLI renkte 3 tam set toplayan kazanır.':
+  'Harika! İki set de tamam. Oyunu FARKLI renkte 3 tam set toplayan kazanır.':
       'Great! Both sets are complete. Whoever collects 3 complete sets of DIFFERENT colors wins.',
   '{renk} seti tamamlandı! Set boyu (2, 3 ya da 4) kartın üstünde yazar.':
       'The {renk} set is complete! The set size (2, 3 or 4) is printed on the card.',
@@ -97,4 +97,21 @@ const Map<String, String> enOgretici = {
   'Giriş yap, ödülleri topla': 'Sign in to collect rewards',
   '{n} ödül seni bekliyor': '{n} reward(s) waiting for you',
   'XP ve altın kazan': 'Earn XP and gold',
+  '⚔️ Rakip saldırıyor!': '⚔️ Your rival is attacking!',
+  '{ad} sana İcra Takibi oynadı: senden 5M istiyor.': '{ad} played Pay Up on you: they want 5M from you.',
+  'Elindeki Reddet kartı bu saldırıyı iptal eder.': 'Your Reject card cancels this attack.',
+  'Reddet\'i oyna': 'Play Reject',
+  '🏆 İlk maçını kazandın!': '🏆 You won your first match!',
+  'Artık kuralları biliyorsun. Gerçek rakiplerle oynamaya hazırsın.': 'Now you know the rules. You\'re ready to play real opponents.',
+  'Oyuna başla': 'Start playing',
+  'Öğretici atlansın mı?': 'Skip the tutorial?',
+  'Rehberli maçı menüden istediğin zaman tekrar oynayabilirsin.': 'You can replay the guided match from the menu any time.',
+  'Devam et': 'Continue',
+  'Atla': 'Skip',
+  'Öğreticiyi atla': 'Skip tutorial',
+  'Devam': 'Continue',
+  'Rehberli maç (önerilen)': 'Guided match (recommended)',
+  'Anlatıcı seninle oynayarak öğretir': 'A guide teaches you as you play',
+  'Kurallar ve örnekler': 'Rules and examples',
+  'Adım adım kural anlatımı ve küçük demolar': 'Step-by-step rules and small demos',
 };

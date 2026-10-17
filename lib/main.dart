@@ -151,8 +151,36 @@ class _MenuScreenState extends State<MenuScreen> {
     if (!Ayarlar.o.ogreticiGoruldu) {
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => const OgreticiEkrani())),
+            .push(MaterialPageRoute(builder: (_) => const GameScreen(ogretici: true))),
       );
+    }
+  }
+
+  /// "Nasıl oynanır": rehberli ilk maç (önerilen) ya da kurallar/demolar.
+  Future<void> _ogreticiSec() async {
+    final sec = await showModalBottomSheet<int>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.play_circle_fill, color: Colors.green),
+            title: Text(t('Rehberli maç (önerilen)')),
+            subtitle: Text(t('Anlatıcı seninle oynayarak öğretir')),
+            onTap: () => Navigator.pop(ctx, 0),
+          ),
+          ListTile(
+            leading: const Icon(Icons.menu_book),
+            title: Text(t('Kurallar ve örnekler')),
+            subtitle: Text(t('Adım adım kural anlatımı ve küçük demolar')),
+            onTap: () => Navigator.pop(ctx, 1),
+          ),
+        ]),
+      ),
+    );
+    if (sec == 0) {
+      await _ac(const GameScreen(ogretici: true));
+    } else if (sec == 1) {
+      await _ac(const OgreticiEkrani());
     }
   }
 
@@ -683,7 +711,7 @@ class _MenuScreenState extends State<MenuScreen> {
                                       Icons.school,
                                       t('Nasıl oynanır'),
                                       Colors.lightGreenAccent,
-                                      () => _ac(const OgreticiEkrani()),
+                                      _ogreticiSec,
                                     ),
                                   ],
                                 ),

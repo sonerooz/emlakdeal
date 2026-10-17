@@ -43,7 +43,7 @@ class _OgreticiEkraniState extends State<OgreticiEkrani> {
     const _Adim.metin(
       Icons.attach_money,
       'Para ve ödeme',
-      'Hamle ve kira kartları bankaya konursa para olur; geri alınamaz. Borç banka ve tapulardan ödenir, elden ödenmez. Yetmezse her şeyini verirsin. Soluk görünen kartın işlevi şu an oynanamaz, yine de bankaya konabilir.',
+      'Hamle ve kira kartları bankaya konursa para olur; geri alınamaz. Borç banka ve tapulardan ödenir, elden ödenmez. Yetmezse her şeyini verirsin. Soluk görünen kart şu an oynanamaz, ama yine de bankaya konabilir.',
     ),
     const _Adim.metin(
       Icons.receipt_long,
@@ -54,7 +54,7 @@ class _OgreticiEkraniState extends State<OgreticiEkrani> {
     const _Adim.metin(
       Icons.gavel,
       'Saldırı kartları',
-      'Tapu Devri: tam olmayan setten bir tapu al. Takas Pazarlığı: tapu takas et (tam setler hariç). Haciz: rakibin TAM setini ev/rezidansıyla birlikte al. İcra Takibi: seçtiğin birinden 5M. Her biri 1 hamle harcar. Şimdi hepsini tek tek deneyelim.',
+      'Tapu Devri: tamamlanmamış setten bir tapu al. Takas Pazarlığı: tapu takas et (tam setler hariç). Haciz: rakibin TAM setini ev/rezidansıyla birlikte al. İcra Takibi: seçtiğin birinden 5M. Her biri 1 hamle harcar. Şimdi hepsini tek tek deneyelim.',
     ),
     _Adim.demo((b) => DemoTapuDevri(bitti: b)),
     _Adim.demo((b) => DemoTakas(bitti: b)),

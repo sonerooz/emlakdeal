@@ -37,7 +37,7 @@ final List<(RegExp, String)> _kaliplar = [
   (_r(r'@ süresi doldu, tur geçti\.'), "{1}'s time ran out; the turn was skipped."),
   (_r(r'@ geri döndü, yeniden kendisi oynuyor\.'), '{1} is back and is playing again.'),
   (_r(r'@ geri döndü\.'), '{1} is back.'),
-  (_r(r'@ bağlantısı koptu, 30 sn bekleniyor…'), '{1} disconnected; waiting 30 s…'),
+  (_r(r'@ bağlantısı koptu, 60 sn bekleniyor…'), '{1} disconnected; waiting 60 s…'),
   (_r(r'@ geri dönmedi, yerine bot oynuyor\.'), "{1} didn't come back; a bot is playing instead."),
   (_r(r'Bilinmeyen hamle: (.+)'), 'Unknown move: {1}'),
   (_r(r'Bilinmeyen mesaj: (.+)'), 'Unknown message: {1}'),

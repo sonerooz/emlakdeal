@@ -647,7 +647,7 @@ class Game extends Bildirici {
     final otelVar = mevcut.any((b) => b.action == ActionType.hotel);
     if (c.action == ActionType.house && evVar) return false;
     if (c.action == ActionType.hotel && (!evVar || otelVar)) return false;
-    await _soyle(p, '${set.ad} setine ${c.action == ActionType.house ? 'ev' : 'otel'} koyuyorum.');
+    await _soyle(p, '${set.ad} setine ${c.action == ActionType.house ? 'ev' : 'rezidans'} koyuyorum.');
     await _anim(GameEvent(EvTip.mulk, c, kim: p, renk: set));
     p.hand.remove(c);
     p.binalar.putIfAbsent(set, () => []).add(c);

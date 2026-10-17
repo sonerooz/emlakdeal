@@ -73,7 +73,7 @@ const Map<String, String> enAna = {
   'Zor botlara karşı 1 oyun kazan': 'Win 1 game against hard bots',
   '4 veya 5 kişilik bir oyun kazan': 'Win a game with 4 or 5 players',
   'Herkes aynı miktarı yatırır, gerçek oyuncuların toplamı kazanana gider. Bot kazanırsa herkese iade edilir.': 'Everyone puts in the same amount and the real players\' total goes to the winner. If a bot wins, everyone is refunded.',
-  'Altın yetmez': 'Not enough gold',
+  'Altın yetmiyor': 'Not enough gold',
   'Oyundan çıkılsın mı?': 'Leave the game?',
   'Devam et': 'Keep playing',
   'Çık': 'Leave',

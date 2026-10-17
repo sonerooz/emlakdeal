@@ -150,8 +150,8 @@ extension ActionX on ActionType {
         ActionType.birthday: 'Her oyuncudan 2M al.',
         ActionType.passGo: '2 kart çek.',
         ActionType.house: 'Tam bir sete koy: kira +3M.',
-        ActionType.hotel: 'Evli tam sete koy: kira +4M.',
-        ActionType.doubleRent: 'Bir kira kartıyla oyna: kira 2 katı.',
+        ActionType.hotel: 'Evi olan tam sete koy: kira +4M.',
+        ActionType.doubleRent: 'Kira kartıyla birlikte oyna: kira 2 katı olur.',
       }[this]!;
 
   int get deger => const {

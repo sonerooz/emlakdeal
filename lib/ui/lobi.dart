@@ -273,6 +273,8 @@ class _LobiEkraniState extends State<LobiEkrani> {
             sesler: (m['sesler'] as List?)?.cast<int>() ?? const [],
             bahis: (m['bahis'] as int?) ?? 0,
             havuz: (m['havuz'] as int?) ?? 0,
+            odaKodu: m['oda'] as String?,
+            sifre: _sonKatil?['sifre'] as String?,
           ),
         ));
     }
@@ -305,7 +307,7 @@ class _LobiEkraniState extends State<LobiEkrani> {
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
           onPressed: dolu || _mesgul || yetmez ? null : () => _listedenKatil(o),
-          child: Text(dolu ? t('Dolu') : (yetmez ? t('Altın yetmez') : t('Katıl')), style: const TextStyle(fontWeight: FontWeight.w800)),
+          child: Text(dolu ? t('Dolu') : (yetmez ? t('Altın yetmiyor') : t('Katıl')), style: const TextStyle(fontWeight: FontWeight.w800)),
         ),
       ]),
     );
