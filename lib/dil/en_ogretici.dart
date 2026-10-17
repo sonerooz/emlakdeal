@@ -108,6 +108,8 @@ const Map<String, String> enOgretici = {
   'Rehberli maçı menüden istediğin zaman tekrar oynayabilirsin.': 'You can replay the guided match from the menu any time.',
   'Devam et': 'Continue',
   'Atla': 'Skip',
+  'Bitir': 'Finish',
+  'Kapat': 'Close',
   'Öğreticiyi atla': 'Skip tutorial',
   'Devam': 'Continue',
   'Rehberli maç (önerilen)': 'Guided match (recommended)',

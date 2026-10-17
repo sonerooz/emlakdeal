@@ -70,6 +70,7 @@ const Map<String, String> enVeri = {
   'Lacivert Çuha': 'Navy Felt',
   'Siyah Çuha (VIP)': 'Black Felt (VIP)',
   'Özel Avatarlar (8 adet)': 'Special Avatars (8)',
+  '2x XP (1 saat)': '2x XP (1 hour)',
   'Böyle bir eşya yok.': 'No such item.',
   'Zaten sende.': 'You already own it.',
   'Bu kart arkası sende yok.': "You don't own this card back.",

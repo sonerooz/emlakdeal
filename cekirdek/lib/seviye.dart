@@ -40,6 +40,15 @@ int levelEsigi(int level) => level >= maxLevel ? 0 : level * 100 + fib(level < 1
   return (xp: (xp * carpan).round(), altin: (altin * carpan).round());
 }
 
+/// Seviye atlama altın ödülü: yeni seviye × 50 (2. seviye 100, 10. seviye 500).
+int levelAltinOdulu(int yeniLevel) => yeniLevel * 50;
+
+/// Günün tüm görevlerini bitirme ödülü.
+const tumGorevOdulu = (xp: 150, altin: 300);
+
+/// Dükkândaki x2 XP güçlendiricisinin süresi.
+const xp2Suresi = Duration(hours: 1);
+
 /// Bot takma adları (nick göstermek için).
 const botAdlari = ['Kerem', 'Elif', 'Can', 'Zeynep', 'Mert', 'Defne', 'Emre', 'Nehir', 'Burak', 'Ece', 'Deniz', 'Selin', 'Arda', 'Lara', 'Kaan', 'Mina'];
 const avatarlar = ['🦊', '🐻', '🐼', '🦁', '🐯', '🐸', '🐵', '🦄', '🐙', '🦉', '🐧', '🐨', '🐲', '🦋', '🐺', '🦩', '🐘'];

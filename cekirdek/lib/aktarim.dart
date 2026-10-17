@@ -76,6 +76,7 @@ Map<String, dynamic> olayJson(Game g, GameEvent e) => {
       if (e.kime != null) 'kime': g.players.indexOf(e.kime!),
       if (e.renk != null) 'renk': e.renk!.index,
       if (e.etiket != null) 'etiket': e.etiket,
+      if (e.tamSet != null) 'tam': e.tamSet,
     };
 
 GameEvent olayOku(Game g, Map<String, dynamic> j) => GameEvent(
@@ -85,6 +86,7 @@ GameEvent olayOku(Game g, Map<String, dynamic> j) => GameEvent(
       kime: j['kime'] == null ? null : g.players[j['kime'] as int],
       renk: j['renk'] == null ? null : PColor.values[j['renk'] as int],
       etiket: j['etiket'] as String?,
+      tamSet: j['tam'] as bool?,
     );
 
 /// Yerel aynada id ile kart bulur (el, banka, tapular, binalar, atık).

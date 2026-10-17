@@ -74,7 +74,7 @@ class Db {
         _db.execute('ALTER TABLE kullanicilar ADD COLUMN $sutun');
       } catch (_) {}
     }
-    for (final sutun in ['gunluk_tarih TEXT', 'gunluk_bot_altin INTEGER NOT NULL DEFAULT 0']) {
+    for (final sutun in ['gunluk_tarih TEXT', 'gunluk_bot_altin INTEGER NOT NULL DEFAULT 0', 'xp2_bitis TEXT']) {
       try {
         _db.execute('ALTER TABLE kullanicilar ADD COLUMN $sutun');
       } catch (_) {}
@@ -229,6 +229,7 @@ class Db {
 
   void testSql(String q) => _db.execute(q);
   int testSayi(String q) => _db.select(q).first.values.first as int;
+  String bugunTarihTest() => _bugun().tarih;
   final _rng = Random.secure();
 
   /// Gizlilik politikasındaki saklama süreleri: ~12 ay hata/olay/işlenmiş şikayet, 18 ay kullanılmayan misafir hesap, 180 gün kullanılmayan oturum.
@@ -380,6 +381,7 @@ class Db {
       'esyalar': esyalar(id),
       'kartArkasi': r['kart_arkasi'] ?? 'klasik',
       'masa': r['masa'] ?? 'yesil',
+      'xp2Bitis': xp2Bitis(id)?.millisecondsSinceEpoch,
     };
   }
 
@@ -466,7 +468,7 @@ class Db {
           online_galibiyet = online_galibiyet + (SELECT online_galibiyet FROM kullanicilar WHERE id = ?1)
         WHERE id = ?2''', [misafir, hedef]);
       final xp = _db.select('SELECT xp FROM kullanicilar WHERE id = ?', [misafir]).first['xp'] as int;
-      _xpEkle(hedef, xp);
+      _xpEkle(hedef, xp, odul: false); // misafir seviye altınını zaten kendi hesabında aldı
       _db.execute('UPDATE oyun_gecmisi SET kullanici_id = ? WHERE kullanici_id = ?', [hedef, misafir]);
       _db.execute('INSERT OR IGNORE INTO basarimlar (kullanici_id, basarim, tarih) SELECT ?, basarim, tarih FROM basarimlar WHERE kullanici_id = ?', [hedef, misafir]);
       _db.execute('INSERT OR IGNORE INTO esyalar (kullanici_id, esya, tarih) SELECT ?, esya, tarih FROM esyalar WHERE kullanici_id = ?', [hedef, misafir]);
@@ -562,13 +564,24 @@ class Db {
 
   int altinOku(int id) => _db.select('SELECT altin FROM kullanicilar WHERE id = ?', [id]).first['altin'] as int;
 
-  /// XP ekler; (önceki level, sonraki level) döner.
-  ({int once, int sonra}) _xpEkle(int id, int xp) {
+  /// XP ekler; her atlanan seviye için altın ödülü verir. (önceki level, sonraki level, seviye altını) döner.
+  ({int once, int sonra, int altin}) _xpEkle(int id, int xp, {bool odul = true}) {
     final once = levelHesapla(_db.select('SELECT xp FROM kullanicilar WHERE id = ?', [id]).first['xp'] as int).level;
     _db.execute('UPDATE kullanicilar SET xp = xp + ? WHERE id = ?', [xp, id]);
     final sonra = levelHesapla(_db.select('SELECT xp FROM kullanicilar WHERE id = ?', [id]).first['xp'] as int).level;
-    _db.execute('UPDATE kullanicilar SET level = ? WHERE id = ?', [sonra, id]);
-    return (once: once, sonra: sonra);
+    var altin = 0;
+    for (var l = once + 1; odul && l <= sonra; l++) {
+      altin += levelAltinOdulu(l);
+    }
+    _db.execute('UPDATE kullanicilar SET level = ?, altin = altin + ? WHERE id = ?', [sonra, altin, id]);
+    return (once: once, sonra: sonra, altin: altin);
+  }
+
+  /// x2 XP güçlendiricisinin bitiş zamanı; etkin değilse null.
+  DateTime? xp2Bitis(int id) {
+    final s = _db.select('SELECT xp2_bitis FROM kullanicilar WHERE id = ?', [id]).first['xp2_bitis'] as String?;
+    final t = s == null ? null : DateTime.tryParse(s);
+    return t != null && t.isAfter(DateTime.now().toUtc()) ? t : null;
   }
 
   /// Oyun sonucu: XP/altın verir, istatistikleri günceller; ödül ve level bilgisini döner.
@@ -592,7 +605,8 @@ class Db {
         online_oyun = online_oyun + ?, online_galibiyet = online_galibiyet + ? WHERE id = ?''',
         [altin, kazandi ? 1 : 0, online ? 1 : 0, (online && kazandi) ? 1 : 0, id]);
     // XP yalnız online (altınlı oda) oyunlardan gelir; botlu oyunlar sadece altın kasmak içindir.
-    final xp = online ? o.xp : 0;
+    final xp2 = online && xp2Bitis(id) != null;
+    final xp = online ? o.xp * (xp2 ? 2 : 1) : 0;
     final lv = _xpEkle(id, xp);
     _db.execute('INSERT INTO oyun_gecmisi (kullanici_id, tarih, mod, kazandi, rakip, zorluk, xp, altin) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         [id, _simdi(), online ? 'online' : 'bot', kazandi ? 1 : 0, rakip, zorluk, xp, altin]);
@@ -613,6 +627,8 @@ class Db {
       'limitDoldu': limitDoldu,
       'level': lv.sonra,
       'levelAtladi': lv.sonra > lv.once,
+      'levelAltin': lv.altin,
+      if (xp2) 'xp2': true,
       'profil': profil(id),
     };
   }
@@ -674,8 +690,32 @@ class Db {
     final t = _bugun().tarih;
     _db.execute('UPDATE gorevler SET alindi = 1 WHERE kullanici_id = ? AND tarih = ? AND gorev = ?', [id, t, gorev]);
     _db.execute('UPDATE kullanicilar SET altin = altin + ? WHERE id = ?', [g['altin'], id]);
-    final lv = _xpEkle(id, g['xp'] as int);
-    return {'xp': g['xp'], 'altin': g['altin'], 'level': lv.sonra, 'levelAtladi': lv.sonra > lv.once};
+    var lv = _xpEkle(id, g['xp'] as int);
+    var levelAltin = lv.altin;
+    final once = lv.once;
+    // Günün tüm görevleri alındıysa bir kereye mahsus bitirme ödülü ('tum' satırı tekrarı önler)
+    Map<String, dynamic>? tum;
+    if (gorevler(id).every((x) => x['alindi'] == true) &&
+        _db.select("SELECT 1 FROM gorevler WHERE kullanici_id = ? AND tarih = ? AND gorev = 'tum'", [id, t]).isEmpty) {
+      _db.execute("INSERT INTO gorevler (kullanici_id, tarih, gorev, ilerleme, alindi) VALUES (?, ?, 'tum', 1, 1)", [id, t]);
+      _db.execute('UPDATE kullanicilar SET altin = altin + ? WHERE id = ?', [tumGorevOdulu.altin, id]);
+      lv = _xpEkle(id, tumGorevOdulu.xp);
+      levelAltin += lv.altin;
+      tum = {'xp': tumGorevOdulu.xp, 'altin': tumGorevOdulu.altin};
+    }
+    return {'xp': g['xp'], 'altin': g['altin'], 'level': lv.sonra, 'levelAtladi': lv.sonra > once, 'levelAltin': levelAltin, if (tum != null) 'tum': tum};
+  }
+
+  /// Tüm görevleri bitirme ödülünün durumu (görev ekranı için).
+  Map<String, dynamic> tumGorevDurumu(int id) {
+    final l = gorevler(id);
+    return {
+      'xp': tumGorevOdulu.xp,
+      'altin': tumGorevOdulu.altin,
+      'alinan': l.where((x) => x['alindi'] == true).length,
+      'toplam': l.length,
+      'alindi': _db.select("SELECT 1 FROM gorevler WHERE kullanici_id = ? AND tarih = ? AND gorev = 'tum'", [id, _bugun().tarih]).isNotEmpty,
+    };
   }
 
   // ---- Bahis emanetleri ----
@@ -737,6 +777,7 @@ class Db {
     'masa_lacivert': ('Lacivert Çuha', 400, 'masa'),
     'masa_siyah': ('Siyah Çuha (VIP)', 800, 'masa'),
     'avatar_paket': ('Özel Avatarlar (8 adet)', 600, 'avatar'),
+    'xp2_saat': ('2x XP (1 saat)', 500, 'guclendirici'),
   };
 
   List<String> esyalar(int id) => [for (final r in _db.select('SELECT esya FROM esyalar WHERE kullanici_id = ?', [id])) r['esya'] as String];
@@ -744,10 +785,17 @@ class Db {
   String? satinAl(int id, String esya) {
     final e = magaza[esya];
     if (e == null) return 'Böyle bir eşya yok.';
-    if (esyalar(id).contains(esya)) return 'Zaten sende.';
+    final guclendirici = e.$3 == 'guclendirici';
+    if (!guclendirici && esyalar(id).contains(esya)) return 'Zaten sende.';
     final altin = _db.select('SELECT altin FROM kullanicilar WHERE id = ?', [id]).first['altin'] as int;
     if (altin < e.$2) return 'Yeterli altın yok (${e.$2} gerekli).';
     _db.execute('UPDATE kullanicilar SET altin = altin - ? WHERE id = ?', [e.$2, id]);
+    if (guclendirici) {
+      // süre etkinse üstüne eklenir
+      final bas = xp2Bitis(id) ?? DateTime.now().toUtc();
+      _db.execute('UPDATE kullanicilar SET xp2_bitis = ? WHERE id = ?', [bas.add(xp2Suresi).toIso8601String(), id]);
+      return null;
+    }
     _db.execute('INSERT INTO esyalar (kullanici_id, esya, tarih) VALUES (?, ?, ?)', [id, esya, _simdi()]);
     return null;
   }

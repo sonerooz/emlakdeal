@@ -22,6 +22,7 @@ void main() {
   e('Kerem geri döndü, yeniden kendisi oynuyor.', 'Kerem is back and is playing again.');
   e('Kerem geri döndü.', 'Kerem is back.');
   e('Kerem bağlantısı koptu, 30 sn bekleniyor…', 'Kerem disconnected; waiting 30 s…');
+  e('Kerem bağlantısı koptu, 60 sn bekleniyor…', 'Kerem disconnected; waiting 60 s…');
   e('Kerem geri dönmedi, yerine bot oynuyor.', "Kerem didn't come back; a bot is playing instead.");
   e('Bilinmeyen hamle: x', 'Unknown move: x');
   e('Bilinmeyen mesaj: y', 'Unknown message: y');

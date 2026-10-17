@@ -116,13 +116,14 @@ class Player {
 enum EvTip { cek, mulk, banka, aksiyon, transfer }
 
 class GameEvent {
-  GameEvent(this.tip, this.card, {this.kim, this.kime, this.renk, this.etiket});
+  GameEvent(this.tip, this.card, {this.kim, this.kime, this.renk, this.etiket, this.tamSet});
   final EvTip tip;
   final GameCard card;
   final Player? kim; // hareketi yapan / veren
   final Player? kime; // alan (transfer)
   final PColor? renk;
   final String? etiket; // ortada gösterilecek yazı (aksiyon adı vb.)
+  final bool? tamSet; // mülk olayında: bu kart seti tamamlıyor mu (olay anında, durum işlenmeden hesaplanır)
 }
 
 /// Flutter'dan bağımsız basit dinleyici listesi (ChangeNotifier yerine).
@@ -304,7 +305,7 @@ class Game extends Bildirici {
       renk = secilen;
     }
     await _soyle(p, c.isWild ? 'Jokeri ${renk.ad} setine koyuyorum.' : '${renk.ad} tapu masaya.');
-    await _anim(GameEvent(EvTip.mulk, c, kim: p, renk: renk));
+    await _anim(GameEvent(EvTip.mulk, c, kim: p, renk: renk, tamSet: p.propsOf(renk).length + 1 == renk.setBoyu));
     p.hand.remove(c);
     p.mulkEkle(c, renk);
     _log('${p.name} ${c.ad} tapusunu ${renk.ad} setine koydu.');

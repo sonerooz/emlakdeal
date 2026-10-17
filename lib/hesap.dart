@@ -241,6 +241,16 @@ class Hesap {
   }
 
   int get gorevHazir => misafir ? 0 : (profil?['gorevHazir'] as int? ?? 0);
+
+  /// x2 XP güçlendiricisinin bitişi; etkin değilse null.
+  DateTime? get xp2Bitis {
+    final ms = profil?['xp2Bitis'] as int?;
+    final t = ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+    return t != null && t.isAfter(DateTime.now()) ? t : null;
+  }
+
+  /// Tüm görevleri bitirme ödülü durumu: {xp, altin, alinan, toplam, alindi}; eski sunucuda null.
+  Map<String, dynamic>? tumOdul;
   int get botKotaKullanilan => (profil?['botKota']?['kullanilan'] as num?)?.toInt() ?? 0;
   int get botKotaLimit => (profil?['botKota']?['limit'] as num?)?.toInt() ?? 10000;
   bool get botKotaDoldu => profil?['botKota']?['doldu'] == true;
@@ -250,6 +260,7 @@ class Hesap {
     try {
       final r = await _istek('/api/gorevler');
       if (r['profil'] is Map) await _profilKaydet(Map<String, dynamic>.from(r['profil'] as Map));
+      tumOdul = r['tumOdul'] is Map ? Map<String, dynamic>.from(r['tumOdul'] as Map) : null;
       return [for (final g in (r['gorevler'] as List)) Map<String, dynamic>.from(g as Map)];
     } catch (_) {
       return null;
@@ -261,6 +272,7 @@ class Hesap {
     try {
       final r = await _istek('/api/gorev_al', govde: {'gorev': id});
       await _profilKaydet(Map<String, dynamic>.from(r['profil'] as Map));
+      tumOdul = r['tumOdul'] is Map ? Map<String, dynamic>.from(r['tumOdul'] as Map) : null;
       return r;
     } catch (_) {
       return null;

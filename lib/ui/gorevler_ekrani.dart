@@ -44,7 +44,10 @@ class _GorevlerEkraniState extends State<GorevlerEkrani> {
       _mesgul = null;
       if (r != null) {
         _liste = [for (final x in (r['gorevler'] as List)) Map<String, dynamic>.from(x as Map)];
-        _bilgi = '+${r['xp']} XP  ·  ${t('{n} altın', {'n': r['altin']})}${r['levelAtladi'] == true ? '  ·  ${t('Seviye {n}', {'n': r['level']})}' : ''}';
+        final tum = r['tum'] as Map?;
+        final xp = (r['xp'] as int) + ((tum?['xp'] as int?) ?? 0);
+        final altin = (r['altin'] as int) + ((tum?['altin'] as int?) ?? 0) + ((r['levelAltin'] as int?) ?? 0);
+        _bilgi = '${tum != null ? '${t('Tüm görevler bitti!')}  ' : ''}+$xp XP  ·  ${t('{n} altın', {'n': altin})}${r['levelAtladi'] == true ? '  ·  ${t('Seviye {n}', {'n': r['level']})}' : ''}';
       } else {
         _bilgi = t('Sunucuya ulaşılamadı.');
       }
@@ -93,6 +96,7 @@ class _GorevlerEkraniState extends State<GorevlerEkrani> {
                         child: Text('🎉 $_bilgi', textAlign: TextAlign.center, style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.w900, fontSize: 15)),
                       ),
                     for (final g in _liste!) _gorev(g),
+                    if (h.tumOdul != null) _tumGorev(h.tumOdul!),
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -115,6 +119,38 @@ class _GorevlerEkraniState extends State<GorevlerEkrani> {
                     ),
                   ]),
                 ),
+    );
+  }
+
+  /// Günün tüm görevlerini bitirme ödülü (son görev alınınca kendiliğinden verilir).
+  Widget _tumGorev(Map<String, dynamic> d) {
+    final alinan = d['alinan'] as int, toplam = d['toplam'] as int, alindi = d['alindi'] == true;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: alindi ? 0.06 : 0.14),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.amber.withValues(alpha: alindi ? 0.3 : 0.8), width: 1.5),
+      ),
+      child: Row(children: [
+        const Text('🏆', style: TextStyle(fontSize: 26)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(t('Tüm görevleri bitir'), style: TextStyle(color: alindi ? Colors.white38 : Colors.amber, fontWeight: FontWeight.w900, fontSize: 15)),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: LinearProgressIndicator(value: toplam == 0 ? 0 : alinan / toplam, minHeight: 8, backgroundColor: Colors.white12, color: Colors.amber),
+            ),
+            const SizedBox(height: 4),
+            Text('$alinan / $toplam   ·   +${d['xp']} XP   ·   ${t('{n} altın', {'n': d['altin']})}', style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          ]),
+        ),
+        const SizedBox(width: 10),
+        Icon(alindi ? Icons.check_circle : Icons.emoji_events_outlined, color: alindi ? Colors.greenAccent : Colors.white30, size: 30),
+      ]),
     );
   }
 

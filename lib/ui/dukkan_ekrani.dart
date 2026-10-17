@@ -91,10 +91,36 @@ class _DukkanEkraniState extends State<DukkanEkrani> {
               _baslik(t('Masa çuhası')),
               _satir('masa', 'yesil', t('Yeşil çuha'), 0, sahip, h.masa),
               for (final e in _esyalar!.where((e) => e['tur'] == 'masa')) _satir('masa', e['id'] as String, e['ad'] as String, e['fiyat'] as int, sahip, h.masa),
+              if (_esyalar!.any((e) => e['tur'] == 'guclendirici')) ...[
+                _baslik(t('Güçlendiriciler')),
+                for (final e in _esyalar!.where((e) => e['tur'] == 'guclendirici')) _guclendirici(e['id'] as String, e['ad'] as String, e['fiyat'] as int),
+              ],
               _baslik(t('Avatarlar')),
               for (final e in _esyalar!.where((e) => e['tur'] == 'avatar')) _satir('avatar', e['id'] as String, e['ad'] as String, e['fiyat'] as int, sahip, null),
               if (_mesaj != null) Padding(padding: const EdgeInsets.all(12), child: Text(sunucuMesaj(_mesaj!), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700))),
             ]),
+    );
+  }
+
+  /// Süreli ürün (x2 XP): tekrar alınabilir, etkinse süre üstüne eklenir.
+  Widget _guclendirici(String id, String ad, int fiyat) {
+    final bitis = h.xp2Bitis;
+    final kalan = bitis?.difference(DateTime.now());
+    return Card(
+      color: bitis != null ? const Color(0xFF1E7B3A) : Colors.white10,
+      child: ListTile(
+        leading: const Text('⚡', style: TextStyle(fontSize: 30)),
+        title: Text(sunucuMesaj(ad), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        subtitle: Text(
+          kalan != null ? t('Etkin: {d} dk kaldı. Online oyunlarda 2 kat XP.', {'d': kalan.inMinutes + 1}) : t('1 saat boyunca online oyunlarda 2 kat XP.'),
+          style: const TextStyle(color: Colors.white70),
+        ),
+        trailing: FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: Colors.amber, foregroundColor: Colors.black),
+          onPressed: _mesgul || h.misafir || h.altin < fiyat ? null : () => _al(id),
+          child: Text(t('Al · {n}', {'n': fiyat})),
+        ),
+      ),
     );
   }
 

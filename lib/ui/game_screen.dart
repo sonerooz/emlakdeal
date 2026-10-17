@@ -103,7 +103,20 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   bool get _online => widget.net != null;
   late Istemci? _netM = widget.net;
   bool _baglaniyor = false;
+  // Çekiş animasyonu bitmeden deste/el sayısı düşmesin diye: _cekOlay = oynanmayı bekleyen çekişler,
+  // _cekYansimamis = olayı gelmiş ama durumu henüz gelmemiş olanlar (sunucu olayı durumdan önce yollar).
+  // Masaya giden etkin değer = olay − yansımamış; böylece sayı önce yükselip sonra düşmez.
   final Map<Player, int> _bekleyenCek = {};
+  final Map<Player, int> _cekOlay = {};
+  final Map<Player, int> _cekYansimamis = {};
+
+  void _bekleyenHesapla() {
+    _bekleyenCek.clear();
+    for (final p in _cekOlay.keys) {
+      final n = (_cekOlay[p] ?? 0) - (_cekYansimamis[p] ?? 0);
+      if (n > 0) _bekleyenCek[p] = n;
+    }
+  }
   StreamSubscription? _netAbone;
   StreamSubscription? _koptuAbone;
   Future<void> _olayKuyrugu = Future.value();
@@ -329,6 +342,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     switch (m['t']) {
       case 'durum':
         durumYukle(game, Map<String, dynamic>.from(m['d'] as Map));
+        _cekYansimamis.clear();
+        _bekleyenHesapla();
         final sb = (m['d'] as Map)['sureBitis'];
         _sureBitis = sb is int ? DateTime.fromMillisecondsSinceEpoch(sb) : null;
         _sayacKur();
@@ -344,7 +359,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
         }
       case 'olay':
         final e = olayOku(game, Map<String, dynamic>.from(m['o'] as Map));
-        if (e.tip == EvTip.cek && e.kim != null) _bekleyenCek[e.kim!] = (_bekleyenCek[e.kim!] ?? 0) + 1;
+        if (e.tip == EvTip.cek && e.kim != null) {
+          _cekOlay[e.kim!] = (_cekOlay[e.kim!] ?? 0) + 1;
+          _cekYansimamis[e.kim!] = (_cekYansimamis[e.kim!] ?? 0) + 1;
+          _bekleyenHesapla();
+        }
         _olayKuyrugu = _olayKuyrugu.then((_) => _animasyon(e));
       case 'soz':
         final sk = game.players[m['kim'] as int];
@@ -739,8 +758,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
         } else {
           await _masaUcur(e.card, deste, elM(kim!), arka: true, ms: 480, w: 40, scaleTo: 0.5);
         }
-        if (_online && (_bekleyenCek[kim] ?? 0) > 0) {
-          if (mounted) setState(() => _bekleyenCek[kim] = _bekleyenCek[kim]! - 1);
+        if (_online && (_cekOlay[kim] ?? 0) > 0) {
+          if (mounted) {
+            setState(() {
+              _cekOlay[kim] = _cekOlay[kim]! - 1;
+              _bekleyenHesapla();
+            });
+          }
         }
         await Future.delayed(const Duration(milliseconds: 120));
       case EvTip.mulk:
@@ -748,7 +772,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
         _efektCal('ef_damga.wav');
         await _masaUcur(e.card, elM(kim!), setM(kim), ms: 520, w: kim == ben ? 56 : 46);
         final renk = e.renk;
-        if (renk != null && e.card.isProperty && e.card.action != ActionType.house && e.card.action != ActionType.hotel && kim.propsOf(renk).length + 1 >= renk.setBoyu) {
+        if (renk != null && e.card.isProperty && e.card.action != ActionType.house && e.card.action != ActionType.hotel && (e.tamSet ?? _setiTamamliyor(kim, renk, e.card))) {
           _efektCal('ef_set.wav', ikinci: true);
         }
       case EvTip.banka:
@@ -779,6 +803,12 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
         await _masaUcur(e.card, from, to, ms: 650, w: 50);
         if (mounted) setState(() => _banner = null);
     }
+  }
+
+  /// Eski sunucu tamSet göndermez: online'da durum animasyondan önce gelebilir, kart sette zaten olabilir.
+  bool _setiTamamliyor(Player p, PColor renk, GameCard c) {
+    final l = p.propsOf(renk);
+    return (l.any((x) => x.id == c.id) ? l.length : l.length + 1) == renk.setBoyu;
   }
 
   String _bas(String s) => Dil.o.en && s.isNotEmpty ? s[0].toUpperCase() + s.substring(1) : s;
@@ -864,6 +894,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
                     const Text('  ·  ', style: TextStyle(fontWeight: FontWeight.w800)),
                   ],
                   Text(o['levelAtladi'] == true ? t('🎉 Seviye {l}!', {'l': o['level']}) : t('Seviye {l}', {'l': o['level']}), style: const TextStyle(fontWeight: FontWeight.w800)),
+                  if (((o['levelAltin'] as num?) ?? 0) > 0) Text('  ·  ${t('Seviye ödülü: +{n} altın', {'n': o['levelAltin']})}', style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF9A6B00))),
+                  if (o['xp2'] == true) const Text('  ·  ⚡ 2x XP', style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF1E7B3A))),
                 ]),
               ),
             if (o != null && bahisliOyun) ...[

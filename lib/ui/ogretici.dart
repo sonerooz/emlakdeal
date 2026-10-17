@@ -131,6 +131,7 @@ class _OgreticiEkraniState extends State<OgreticiEkrani> {
                 ),
                 const SizedBox(width: 10),
                 Text('${_i + 1} / ${_adimlar.length}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                IconButton(onPressed: _bitir, tooltip: t('Kapat'), icon: const Icon(Icons.close, color: Colors.white70)),
               ]),
             ),
             Expanded(
@@ -176,13 +177,10 @@ class _OgreticiEkraniState extends State<OgreticiEkrani> {
               child: Row(
                 children: [
                   if (_i > 0)
-                    TextButton(onPressed: () => _git(-1), child: Text(t('Geri'), style: const TextStyle(color: Colors.white70)))
-                  else if (_atlayabilir)
-                    TextButton(onPressed: _bitir, child: Text(t('Atla'), style: const TextStyle(color: Colors.white70))),
-                  if (_i > 0 && _atlayabilir)
-                    TextButton(onPressed: _bitir, child: Text(t('Atla'), style: const TextStyle(color: Colors.white38))),
+                    TextButton(onPressed: () => _git(-1), child: Text(t('Geri'), style: const TextStyle(color: Colors.white70))),
+                  TextButton(onPressed: _bitir, child: Text(t('Bitir'), style: TextStyle(color: _i > 0 ? Colors.white38 : Colors.white70))),
                   const Spacer(),
-                  if (_adimlar[_i].demoMu && !_tamam.contains(_i) && _atlayabilir && !son)
+                  if (_adimlar[_i].demoMu && !_tamam.contains(_i) && !son)
                     TextButton(onPressed: () => _git(1), child: Text(t('Bu demoyu atla'), style: const TextStyle(color: Colors.white70))),
                   FilledButton(
                     style: FilledButton.styleFrom(

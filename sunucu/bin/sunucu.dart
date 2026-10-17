@@ -52,7 +52,7 @@ class Koltuk {
   int ses;
   Player? player;
   UzakKarar? karar;
-  /// Bağlantı koptu ve 30 sn içinde dönmedi: yerine bot oynar (dönerse geri alır).
+  /// Bağlantı koptu ve 60 sn içinde dönmedi: yerine bot oynar (dönerse geri alır).
   bool botlasti = false;
   Timer? kopmaSayaci;
   bool hazir = false;
@@ -381,6 +381,8 @@ class Oda {
               'altin': r['altin'],
               'level': r['level'],
               'levelAtladi': r['levelAtladi'],
+              'levelAltin': r['levelAltin'],
+              'xp2': r['xp2'],
               'limitDoldu': r['limitDoldu'],
               'bahis': bahisli ? bahis : 0,
               'havuz': havuz,
@@ -806,7 +808,7 @@ void kopti(Baglanti b) {
   _odadanCik(b);
 }
 
-/// Bağlantının koltuğunu odadan ayırır (lobide çıkar, oyunda 30 sn bekleyip bota devreder).
+/// Bağlantının koltuğunu odadan ayırır (lobide çıkar, oyunda 60 sn bekleyip bota devreder).
 void _odadanCik(Baglanti b) {
   final oda = b.oda;
   final k = b.koltuk;
@@ -1170,14 +1172,14 @@ Future<void> _api(HttpRequest req) async {
       case '/api/gorevler':
         if (kim == null) return yaz(401, {'hata': 'oturum yok'});
         if (db.misafirMi(kim)) return yaz(403, {'hata': 'Günlük görevler için giriş yapmalısın.', 'misafir': true});
-        return yaz(200, {'gorevler': db.gorevler(kim), 'profil': db.profil(kim)});
+        return yaz(200, {'gorevler': db.gorevler(kim), 'tumOdul': db.tumGorevDurumu(kim), 'profil': db.profil(kim)});
       case '/api/gorev_al':
         if (kim == null) return yaz(401, {'hata': 'oturum yok'});
         if (req.method != 'POST') return yaz(405, {'hata': 'POST gerekli'});
         if (db.misafirMi(kim)) return yaz(403, {'hata': 'Günlük görevler için giriş yapmalısın.', 'misafir': true});
         final gr = db.gorevAl(kim, _str(govde['gorev'], 40) ?? '');
         if (gr == null) return yaz(400, {'hata': 'Görev ödülü alınamaz.'});
-        return yaz(200, {...gr, 'gorevler': db.gorevler(kim), 'profil': db.profil(kim)});
+        return yaz(200, {...gr, 'gorevler': db.gorevler(kim), 'tumOdul': db.tumGorevDurumu(kim), 'profil': db.profil(kim)});
       case '/api/bonus':
         if (kim == null) return yaz(401, {'hata': 'oturum yok'});
         if (db.misafirMi(kim)) return yaz(403, {'hata': 'Günlük ödül için giriş yapmalısın.', 'misafir': true});
