@@ -34,6 +34,12 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["uygulamaAdi"] = "Emlak Deal"
+        // EMLAKDEAL_TEST=1: telefona marketteki sürümün yanına ayrı uygulama olarak kurulan test derlemesi
+        if (System.getenv("EMLAKDEAL_TEST") == "1") {
+            applicationIdSuffix = ".test"
+            manifestPlaceholders["uygulamaAdi"] = "Emlak Deal Test"
+        }
     }
 
     signingConfigs {

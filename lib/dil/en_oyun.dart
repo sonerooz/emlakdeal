@@ -158,6 +158,8 @@ const Map<String, String> enOyun = {
   'Sesi aç': 'Unmute voices',
   'Tam set {n}/3': 'Complete sets {n}/3',
   'Turu bitir': 'End turn',
+  'Pas geç': 'Pass',
+  '{n} hamle kaldı': '{n} moves left',
   'Henüz kart yok': 'No cards yet',
   '🏦 {n} kart': '🏦 {n} cards',
   'kira {n}M': 'rent {n}M',

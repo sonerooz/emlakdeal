@@ -72,6 +72,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   bool _bittiGosterildi = false;
   bool _hazir = false;
   String? _acikDeste;
+  bool _elAcik = false; // el çekmecesi: açıkken tüm kartlar satırlar hâlinde görünür
 
   final _kStack = GlobalKey();
   final _kDeck = GlobalKey();
@@ -680,7 +681,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     return stackBox.globalToLocal(box.localToGlobal(box.size.center(Offset.zero)));
   }
 
-  Future<void> _ucur(GameCard card, Offset from, Offset to, {bool arka = false, int ms = 420, double w = 74, double scaleTo = 1}) async {
+  Future<void> _ucur(GameCard card, Offset from, Offset to, {bool arka = false, int ms = 420, double w = 89, double scaleTo = 1}) async {
     if (!mounted) return;
     final ctl = AnimationController(vsync: this, duration: Duration(milliseconds: ms));
     final u = _Ucan(card: card, arka: arka, ctl: ctl, from: from, to: to, w: w, scaleTo: scaleTo);
@@ -754,7 +755,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
         _efektCal('ef_dagit.mp3');
         if (kim == ben) {
           // desteden elime: masadan çıkıp 2B ele iner
-          await _ucur(e.card, _nokta(_kDeck), _elNoktasi(kim!), ms: 520, w: 60, scaleTo: 1.25);
+          await _ucur(e.card, _nokta(_kDeck), _elNoktasi(kim!), ms: 520, w: 60, scaleTo: 89 / 60);
         } else {
           await _masaUcur(e.card, deste, elM(kim!), arka: true, ms: 480, w: 40, scaleTo: 0.5);
         }
@@ -770,7 +771,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
       case EvTip.mulk:
         await _buyukGoster(e.card, adim, kim == ben ? 600 : 1100);
         _efektCal('ef_damga.wav');
-        await _masaUcur(e.card, elM(kim!), setM(kim), ms: 520, w: kim == ben ? 56 : 46);
+        await _masaUcur(e.card, elM(kim!), setM(kim), ms: 520, w: kim == ben ? 67 : 55);
         final renk = e.renk;
         if (renk != null && e.card.isProperty && e.card.action != ActionType.house && e.card.action != ActionType.hotel && (e.tamSet ?? _setiTamamliyor(kim, renk, e.card))) {
           _efektCal('ef_set.wav', ikinci: true);
@@ -778,7 +779,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
       case EvTip.banka:
         await _buyukGoster(e.card, adim, kim == ben ? 600 : 1100);
         _efektCal('ef_coin.wav');
-        await _masaUcur(e.card, elM(kim!), bankaM(kim), ms: 480, w: kim == ben ? 56 : 46);
+        await _masaUcur(e.card, elM(kim!), bankaM(kim), ms: 480, w: kim == ben ? 67 : 55);
       case EvTip.aksiyon:
         final yazi = '$adim: ${e.etiket != null ? _bas(oyunMetin(e.etiket!)) : e.card.adT}';
         if (!mounted) return;
@@ -1043,6 +1044,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   final Map<int, DateTime> _sonTik = {};
 
   Future<void> _kartTikla(GameCard c) async {
+    if (_elAcik) setState(() => _elAcik = false); // ilk hamlede çekmece kapanır
     final o = _ogr;
     if (o == null) return _kartTiklaAsil(c);
     if (!o.kartIzinli(c) || !_sirada) return;
@@ -1520,7 +1522,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
 
   Future<void> _turBitir({bool sureDoldu = false}) async {
     if (!_hazir || game.aktif != ben || game.kazanan != null || _botOynuyor) return;
-    setState(() => _acikDeste = null);
+    setState(() {
+      _acikDeste = null;
+      _elAcik = false;
+    });
     if (_online) {
       _netM?.gonder({'t': 'hamle', 'tip': 'turBitir'});
       return;
@@ -1733,12 +1738,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
             decoration: BoxDecoration(color: (_kalanSn! <= 10 ? Colors.redAccent : Colors.black54), borderRadius: BorderRadius.circular(10)),
             child: Text('⏱ $_kalanSn', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
           ),
-        Text(t('Tam set {n}/3', {'n': ben.tamSetSayisi}), style: const TextStyle(color: Colors.white70, fontSize: 11)),
-        IconButton(
-          tooltip: t('Turu bitir'),
-          color: _sirada ? Colors.amber : Colors.white24,
-          onPressed: _sirada && _ogr == null ? _turBitir : null,
-          icon: const Icon(Icons.skip_next, size: 28),
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: Text(t('Tam set {n}/3', {'n': ben.tamSetSayisi}), style: const TextStyle(color: Colors.white70, fontSize: 11)),
         ),
       ]),
     );
@@ -1747,7 +1749,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
   Widget _desteler(Player p, {bool kucuk = false}) {
     final renkler = PColor.values.where((c) => p.propsOf(c).isNotEmpty).toList();
     final kim = p == ben ? 'ben' : p.name;
-    final w = kucuk ? 38.0 : 46.0;
+    final w = kucuk ? 46.0 : 55.0; // okunurluk için %20 büyütüldü (38/46'dan)
     if (renkler.isEmpty && p.bank.isEmpty) {
       // masası boş oyuncunun ilk kartı da kendi alanına uçsun: hedef anahtar boşken de bulunmalı
       return Container(
@@ -1789,29 +1791,166 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin, 
     );
   }
 
+  // Sıra sende değilse ya da kartın asıl işlevi şu an mümkün değilse soluk
+  Widget _elKarti(GameCard c) => KeyedSubtree(
+        key: _kKart.putIfAbsent(c.id, () => GlobalKey()),
+        child: CardView(c, w: 89, dim: _ogr != null ? !(_ogr!.kartIzinli(c) && _sirada) : (!_sirada || !_oynanabilir(c)), onTap: () => _kartTikla(c)),
+      );
+
   Widget _el() {
     return Container(
       color: Colors.black38,
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(t('Elin ({n}/7)', {'n': ben.hand.length}), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
-        const SizedBox(height: 4),
-        SizedBox(
-          key: _kBenEl,
-          height: 112,
-          child: ListView(scrollDirection: Axis.horizontal, children: [
-            for (final c in ben.hand)
-              Padding(
-                padding: const EdgeInsets.only(right: 6),
-                // Sıra sende değilse ya da kartın asıl işlevi şu an mümkün değilse soluk
-                child: KeyedSubtree(
-                  key: _kKart.putIfAbsent(c.id, () => GlobalKey()),
-                  child: CardView(c, w: 74, dim: _ogr != null ? !(_ogr!.kartIzinli(c) && _sirada) : (!_sirada || !_oynanabilir(c)), onTap: () => _kartTikla(c)),
+        Row(children: [
+          // çekmece tutamacı: yukarı ok eli açar, aşağı ok kapatır
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => setState(() => _elAcik = !_elAcik),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(6, 2, 10, 2),
+              decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.white24)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                AnimatedRotation(
+                  turns: _elAcik ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 280),
+                  child: const Icon(Icons.keyboard_arrow_up, color: Colors.white, size: 22),
                 ),
-              ),
-          ]),
+                Text(t('Elin ({n}/7)', {'n': ben.hand.length}), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+              ]),
+            ),
+          ),
+          const Spacer(),
+          if (_sirada) _HamleGosterge(kalan: game.playsLeft.clamp(0, 3)),
+          const SizedBox(width: 10),
+          _PasDugmesi(
+            etkin: _sirada && _ogr == null,
+            // oynanabilir kart kalmadıysa düğme nabız gibi parlar: "yapacak bir şey yok, pas geç"
+            vurgula: _sirada && _ogr == null && ben.hand.every((c) => !_oynanabilir(c)),
+            onTap: _turBitir,
+          ),
+        ]),
+        const SizedBox(height: 4),
+        // çekmece: kapalıyken tek satır kaydırmalı, açıkken tüm kartlar alt alta satırlarda
+        AnimatedSize(
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.bottomCenter,
+          child: _elAcik
+              ? SizedBox(
+                  key: _kBenEl,
+                  width: double.infinity,
+                  child: Wrap(spacing: 6, runSpacing: 6, children: [for (final c in ben.hand) _elKarti(c)]),
+                )
+              : SizedBox(
+                  key: _kBenEl,
+                  height: 134,
+                  child: ListView(scrollDirection: Axis.horizontal, children: [
+                    for (final c in ben.hand) Padding(padding: const EdgeInsets.only(right: 6), child: _elKarti(c)),
+                  ]),
+                ),
         ),
       ]),
+    );
+  }
+}
+
+/// Turda kalan hamle hakkı: dolu nokta = kalan hamle.
+class _HamleGosterge extends StatelessWidget {
+  const _HamleGosterge({required this.kalan});
+  final int kalan;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      for (var i = 0; i < 3; i++)
+        Container(
+          width: 10,
+          height: 10,
+          margin: const EdgeInsets.only(right: 3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: i < kalan ? Colors.amber : Colors.transparent,
+            border: Border.all(color: Colors.amber, width: 1.5),
+          ),
+        ),
+      const SizedBox(width: 3),
+      Text(t('{n} hamle kaldı', {'n': kalan}), style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+    ]);
+  }
+}
+
+/// Elin sağındaki yazılı "Pas geç" düğmesi; 3 hamle bitmeden turu kapatır.
+class _PasDugmesi extends StatefulWidget {
+  const _PasDugmesi({required this.etkin, required this.vurgula, required this.onTap});
+  final bool etkin, vurgula;
+  final VoidCallback onTap;
+
+  @override
+  State<_PasDugmesi> createState() => _PasDugmesiState();
+}
+
+class _PasDugmesiState extends State<_PasDugmesi> with SingleTickerProviderStateMixin {
+  late final AnimationController _nabiz = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+
+  @override
+  void initState() {
+    super.initState();
+    _ayarla();
+  }
+
+  @override
+  void didUpdateWidget(_PasDugmesi eski) {
+    super.didUpdateWidget(eski);
+    _ayarla();
+  }
+
+  void _ayarla() {
+    if (widget.vurgula && !_nabiz.isAnimating) {
+      _nabiz.repeat(reverse: true);
+    } else if (!widget.vurgula && _nabiz.isAnimating) {
+      _nabiz.stop();
+      _nabiz.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _nabiz.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final etkin = widget.etkin;
+    return AnimatedBuilder(
+      animation: _nabiz,
+      builder: (context, child) => Transform.scale(
+        scale: 1 + _nabiz.value * 0.06,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [if (etkin) BoxShadow(color: Colors.amber.withValues(alpha: 0.25 + _nabiz.value * 0.5), blurRadius: 6 + _nabiz.value * 12)],
+          ),
+          child: child,
+        ),
+      ),
+      child: Material(
+        color: etkin ? Colors.amber : Colors.white12,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: etkin ? widget.onTap : null,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 6, 4),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(t('Pas geç'), style: TextStyle(color: etkin ? Colors.black : Colors.white38, fontSize: 15, fontWeight: FontWeight.w900)),
+              const SizedBox(width: 2),
+              Icon(Icons.skip_next, size: 22, color: etkin ? Colors.black : Colors.white38),
+            ]),
+          ),
+        ),
+      ),
     );
   }
 }
